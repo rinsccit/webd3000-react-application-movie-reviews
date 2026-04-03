@@ -6,5 +6,5 @@ export interface Movie {
     runtime: number,
     releaseDate: string,
     createdBy: string,
-    
+    averageCriticScore?: number,
 }
