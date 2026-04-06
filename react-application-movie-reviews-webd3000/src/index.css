@@ -1,12 +1,15 @@
+/* Loads web fonts used across the interface and then loads Tailwind utilities */
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Fraunces:opsz,wght@9..144,500;9..144,700&display=swap');
 @import 'tailwindcss';
 
+/* Defines default colours and type for the entire webpage */
 :root {
   color: #1f2937;
   background-color: #fffef9;
   font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
 }
 
+/* Adds a warm background gradient so the layout feels less flat */
 body {
   margin: 0;
   min-height: 100vh;
@@ -22,6 +25,7 @@ h3 {
   font-family: 'Fraunces', Georgia, serif;
 }
 
+/* Simple entrance animation used when content first appears on screen */
 @keyframes fade-up {
   from {
     opacity: 0;
@@ -34,6 +38,7 @@ h3 {
   }
 }
 
+/* Helper class that applies the fade-up animation to components */
 .fade-up {
   animation: fade-up 450ms ease-out both;
 }

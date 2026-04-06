@@ -1,4 +1,4 @@
-# Logs
+# Ignore temporary logs produced during development and troubleshooting
 logs
 *.log
 npm-debug.log*
@@ -7,12 +7,13 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Ignore installed packages and generated build output
 node_modules
 dist
 dist-ssr
 *.local
 
-# Editor directories and files
+# Ignore local editor and operating-system files that should not be shared
 .vscode/*
 !.vscode/extensions.json
 .idea

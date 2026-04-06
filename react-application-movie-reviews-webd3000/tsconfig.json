@@ -1,4 +1,6 @@
 {
+  // This root file does not compile code by itself.
+  // It points TypeScript to the separate application and tooling configurations
   "files": [],
   "references": [
     { "path": "./tsconfig.app.json" },

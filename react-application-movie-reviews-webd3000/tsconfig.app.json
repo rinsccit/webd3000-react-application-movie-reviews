@@ -1,14 +1,18 @@
 {
+  // TypeScript settings for browser-facing application code
   "compilerOptions": {
+    // Keeps build cache files out of source folders
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    // Targets modern JavaScript features supported by current browsers
     "target": "ES2023",
     "useDefineForClassFields": true,
+    // Includes browser A.P.Is such as Document, Window and iterables
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "types": ["vite/client"],
     "skipLibCheck": true,
 
-    /* Bundler mode */
+    // These settings match Vite bundling behaviour
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
@@ -16,7 +20,7 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    /* Linting */
+    // Strict checks reduce hidden bugs and improve reliability
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
@@ -24,5 +28,6 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
+  // Only compile files inside the source directory
   "include": ["src"]
 }

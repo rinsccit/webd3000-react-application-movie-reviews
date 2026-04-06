@@ -1,73 +1,50 @@
-# React + TypeScript + Vite
+# MovieReviews Frontend (WEBD3000)
 
-This template provides a minimal setup to get React working in Vite with H.M.R and some ESLint rules.
+## Project purpose
+This project is a React web application that lets people:
 
-Currently, two official plugins are available:
+- browse movies,
+- open an individual movie page,
+- read published critic reviews,
+- and search with highlighted matches.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+The application connects to a C# A.P.I through the `/api` proxy configured in Vite.
 
-## React Compiler
+## How to run the project
 
-The React Compiler is not enabled on this template because of its impact on develeopment & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+1. Install packages:
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configurations (configs)...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configurations (configs)...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+2. Start development mode:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configurations (configs)...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React D.O.M
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run dev
 ```
+
+3. Create a production build:
+
+```bash
+npm run build
+```
+
+## File-by-file guide (plain language)
+
+- `src/main.tsx`: Starts React and mounts the application into the H.T.M.L webpage.
+- `src/App.tsx`: Contains routing, shared layout, homepage logic, movie details logic and search/highlighting behaviour.
+- `src/services/movieApi.ts`: Handles A.P.I calls, normalizes payloads and provides review debug helpers.
+- `src/types/Movie.ts`: Defines the movie data shape used by the interface.
+- `src/types/Review.ts`: Defines the review data shape used by the interface.
+- `src/index.css`: Main visual style rules and animation helpers.
+- `index.html`: Basic H.T.M.L shell where React mounts.
+- `vite.config.ts`: Development server settings and A.P.I proxy rules.
+- `eslint.config.js`: Code-quality and linting rules.
+- `tsconfig.json`, `tsconfig.app.json`, `tsconfig.node.json`: TypeScript safety rules for application code and tooling.
+- `.gitignore`: Files that should stay local and not be committed.
+
+## Notes about comments and machine-generated files
+
+- This project now includes explanatory comments in source and configuration files that support comments.
+- `package.json` and `package-lock.json` are strict J.S.O.N files so comment syntax is not valid there.

@@ -1,8 +1,10 @@
 import type { Movie } from '../types/Movie'
 import type { Review } from '../types/Review'
 
+// All A.P.I calls start from this base path. In development, Vite forwards /api to the local backend.
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
+// Custom error type so the rest of the application can react to H.T.T.P status codes.
 class ApiResponseError extends Error {
   status: number
 
@@ -12,10 +14,12 @@ class ApiResponseError extends Error {
   }
 }
 
+// Confirms that a value is an object-like record before trying to read named fields from it.
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
+// Tries several field names because backend payloads can vary between environments.
 function getField(record: Record<string, unknown>, keys: string[]): unknown {
   for (const key of keys) {
     const value = record[key]
@@ -27,6 +31,7 @@ function getField(record: Record<string, unknown>, keys: string[]): unknown {
   return undefined
 }
 
+// Safely converts unknown values to text for display.
 function asString(value: unknown, fallback = ''): string {
   if (typeof value === 'string') {
     return value
@@ -39,6 +44,7 @@ function asString(value: unknown, fallback = ''): string {
   return fallback
 }
 
+// Safely converts unknown values to numbers for calculations.
 function asNumber(value: unknown, fallback = 0): number {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value
@@ -54,6 +60,22 @@ function asNumber(value: unknown, fallback = 0): number {
   return fallback
 }
 
+// Some A.P.Is send genre as a list while others send one string.
+function asGenre(value: unknown): string {
+  if (typeof value === 'string') {
+    return value
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .filter((entry): entry is string => typeof entry === 'string')
+      .join(', ')
+  }
+
+  return ''
+}
+
+// Converts different publish-status styles into one true-or-false value.
 function asBoolean(value: unknown, fallback = true): boolean {
   if (typeof value === 'boolean') {
     return value
@@ -74,6 +96,7 @@ function asBoolean(value: unknown, fallback = true): boolean {
   return fallback
 }
 
+// Finds an array payload even when the backend wraps it in another object.
 function getArrayPayload(payload: unknown): unknown[] {
   if (Array.isArray(payload)) {
     return payload
@@ -92,9 +115,66 @@ function getArrayPayload(payload: unknown): unknown[] {
     }
   }
 
+  // Some A.P.Is wrap arrays under custom property names.
+  for (const value of Object.values(payload)) {
+    if (Array.isArray(value)) {
+      return value
+    }
+  }
+
   return []
 }
 
+// Detects whether an object probably represents a review.
+function isLikelyReviewRecord(record: Record<string, unknown>): boolean {
+  const reviewHints = [
+    'criticName',
+    'critic',
+    'reviewerName',
+    'comment',
+    'reviewText',
+    'content',
+    'body',
+    'description',
+    'score',
+    'rating',
+    'criticScore',
+    'publishedAt',
+    'publishedDate',
+    'timePublishedAgo',
+  ]
+
+  return reviewHints.some((key) => record[key] !== undefined && record[key] !== null)
+}
+
+// These are known movie ID field names observed across different backend conventions.
+const MOVIE_ID_FIELD_KEYS = ['movieId', 'movieID', 'MovieId', 'movie_id', 'movie', 'filmId', 'filmID']
+
+// Tracks whether the backend explicitly linked the review to a movie.
+function hasExplicitMovieId(rawReview: Record<string, unknown>): boolean {
+  const movieIdValue = getField(rawReview, MOVIE_ID_FIELD_KEYS)
+
+  if (movieIdValue === undefined || movieIdValue === null) {
+    return false
+  }
+
+  if (typeof movieIdValue === 'string') {
+    return movieIdValue.trim().length > 0
+  }
+
+  if (typeof movieIdValue === 'number') {
+    return Number.isFinite(movieIdValue)
+  }
+
+  return true
+}
+
+// Normalizes IDs for reliable text comparison.
+function normalizeId(value: string): string {
+  return value.trim().toLowerCase()
+}
+
+// Finds one object payload even if the backend wraps it in a data container.
 function getObjectPayload(payload: unknown): Record<string, unknown> | null {
   if (isRecord(payload)) {
     if ('id' in payload || 'title' in payload || 'synopsis' in payload) {
@@ -118,14 +198,17 @@ function getObjectPayload(payload: unknown): Record<string, unknown> | null {
   return null
 }
 
+// Converts raw movie payloads into the application's movie model.
 function normalizeMovie(rawMovie: Record<string, unknown>): Movie {
   const imageValue = asString(getField(rawMovie, ["image", "imageUrl", "poster", "posterUrl", "posterImage"]))
+  const genreValue = asGenre(getField(rawMovie, ["genre", "genres", "category", "categories"]))
 
   return {
     id: asString(getField(rawMovie, ["id", "movieId", "_id"]), crypto.randomUUID()),
     title: asString(getField(rawMovie, ["title", "name"]), "Untitled Movie"),
     image: imageValue || "https://placehold.co/400x600?text=No+Poster",
     synopsis: asString(getField(rawMovie, ["synopsis", "description", "summary"]), "No synopsis available yet."),
+    genre: genreValue,
     runtime: asNumber(getField(rawMovie, ["runtime", "duration"]), 0),
     releaseDate: asString(getField(rawMovie, ["releaseDate", "releasedAt", "release"]), ""),
     createdBy: asString(getField(rawMovie, ["createdBy", "author", "owner"]), "Administrator"),
@@ -133,27 +216,46 @@ function normalizeMovie(rawMovie: Record<string, unknown>): Movie {
   }
 }
 
+// Converts raw review payloads into the application's review model.
 function normalizeReview(rawReview: Record<string, unknown>, movieId: string): Review {
+  const scoreValue = getField(rawReview, ["score", "rating", "criticScore", "criticRating", "stars"])
+  const normalizedScore = asNumber(scoreValue, NaN)
+
   return {
     id: asString(getField(rawReview, ["id", "reviewId", "_id"]), crypto.randomUUID()),
-    movieId: asString(getField(rawReview, ["movieId", "movie"]), movieId),
+    movieId: asString(getField(rawReview, MOVIE_ID_FIELD_KEYS), movieId),
+    title: asString(getField(rawReview, ["title", "reviewTitle", "headline"]), ""),
     criticName: asString(getField(rawReview, ["criticName", "critic", "reviewerName", "createdBy"]), "Anonymous Critic"),
-    score: asNumber(getField(rawReview, ["score", "rating", "criticScore"]), 0),
-    comment: asString(getField(rawReview, ["comment", "reviewText", "content", "body"]), "No written review available."),
+    score: Number.isFinite(normalizedScore) ? normalizedScore : undefined,
+    comment: asString(getField(rawReview, ["comment", "reviewText", "content", "body", "description"]), "No written review available."),
     isPublished: asBoolean(getField(rawReview, ["isPublished", "published", "status"]), true),
-    publishedAt: asString(getField(rawReview, ["publishedAt", "createdAt", "updatedAt"]), ""),
+    publishedAt: asString(getField(rawReview, ["publishedAt", "publishedDate", "createdAt", "updatedAt"]), ""),
+    timePublishedAgo: asString(getField(rawReview, ["timePublishedAgo", "publishedAgo", "timeAgo"]), ""),
   }
 }
 
+// Calculates one average critic score from all scored reviews.
 function getAverageScore(reviews: Review[]): number {
-  if (reviews.length === 0) {
+  const scoredReviews = reviews.filter(
+    (review): review is Review & { score: number } => typeof review.score === 'number' && Number.isFinite(review.score),
+  )
+
+  if (scoredReviews.length === 0) {
     return 0
   }
 
-  const total = reviews.reduce((sum, review) => sum + review.score, 0)
-  return Number((total/reviews.length).toFixed(1))
+  const total = scoredReviews.reduce((sum, review) => sum + review.score, 0)
+  return Number((total/scoredReviews.length).toFixed(1))
 }
 
+// Debug result shape used to inspect raw payloads during troubleshooting.
+interface MovieReviewsDebugResult {
+  reviews: Review[]
+  rawPayload: unknown
+  requestedPath: string | null
+}
+
+// Performs one H.T.T.P request and returns parsed J.S.O.N or null for empty responses.
 async function requestJson(path: string): Promise<unknown> {
   const response = await fetch(path)
 
@@ -174,6 +276,7 @@ async function requestJson(path: string): Promise<unknown> {
   return JSON.parse(responseText) as unknown
 }
 
+// Tries several endpoint options until one works.
 async function requestFirstAvailable(paths: string[]): Promise<unknown> {
   let lastError: unknown = null
 
@@ -182,7 +285,8 @@ async function requestFirstAvailable(paths: string[]): Promise<unknown> {
       return await requestJson(path)
     } catch (error) {
       lastError = error
-      if (error instanceof ApiResponseError && error.status === 404) {
+      if (error instanceof ApiResponseError) {
+        // Endpoints can differ across environments; keep trying fallbacks.
         continue
       }
 
@@ -193,6 +297,7 @@ async function requestFirstAvailable(paths: string[]): Promise<unknown> {
   throw lastError ?? new Error('No endpoint returned data.')
 }
 
+// Loads all movies and ensures every movie has an average critic score.
 export async function fetchMovies(): Promise<Movie[]> {
   const payload = await requestJson(`${API_BASE_URL}/movies`)
   const rawMovies = getArrayPayload(payload).filter(isRecord)
@@ -223,6 +328,7 @@ export async function fetchMovies(): Promise<Movie[]> {
   return withAverageScores
 }
 
+// Loads one movie by ID then back-fills average score when the A.P.I does not provide it
 export async function fetchMovieById(movieId: string): Promise<Movie> {
   const payload = await requestFirstAvailable([
     `${API_BASE_URL}/movies/${movieId}`,
@@ -248,27 +354,71 @@ export async function fetchMovieById(movieId: string): Promise<Movie> {
   }
 }
 
-export async function fetchMovieReviews(movieId: string): Promise<Review[]> {
-  let payload: unknown
+// Internal review fetch that also returns raw payload details for debugging
+async function fetchMovieReviewsInternal(movieId: string): Promise<MovieReviewsDebugResult> {
+  const reviewPaths = [
+    `${API_BASE_URL}/movies/reviews?movieId=${encodeURIComponent(movieId)}`,
+    `${API_BASE_URL}/movies/reviews?movieID=${encodeURIComponent(movieId)}`,
+    `${API_BASE_URL}/movies/reviews/${movieId}`,
+    `${API_BASE_URL}/movies/reviews`,
+    `${API_BASE_URL}/movies/${movieId}/reviews`,
+    `${API_BASE_URL}/reviews/movie/${movieId}`,
+    `${API_BASE_URL}/reviews?movieId=${encodeURIComponent(movieId)}`,
+    `${API_BASE_URL}/reviews?movieID=${encodeURIComponent(movieId)}`,
+    `${API_BASE_URL}/reviews?id=${encodeURIComponent(movieId)}`,
+    `${API_BASE_URL}/reviews/${movieId}`,
+  ]
 
-  try {
-    payload = await requestFirstAvailable([
-      `${API_BASE_URL}/movies/${movieId}/reviews`,
-      `${API_BASE_URL}/reviews/movie/${movieId}`,
-      `${API_BASE_URL}/reviews?movieId=${encodeURIComponent(movieId)}`,
-    ])
-  } catch (error) {
-    if (error instanceof ApiResponseError && error.status === 404) {
-      return []
+  let payload: unknown = null
+  let requestedPath: string | null = null
+
+  for (const path of reviewPaths) {
+    try {
+      payload = await requestJson(path)
+      requestedPath = path
+      break
+    } catch (error) {
+      if (error instanceof ApiResponseError) {
+        continue
+      }
+
+      throw error
     }
-
-    throw error
   }
 
-  const rawReviews = getArrayPayload(payload).filter(isRecord)
+  if (!requestedPath) {
+    return {
+      reviews: [],
+      rawPayload: null,
+      requestedPath: null,
+    }
+  }
 
-  return rawReviews
-    .map((rawReview) => normalizeReview(rawReview, movieId))
+  const arrayPayload = getArrayPayload(payload).filter(isRecord)
+  const singlePayload = getObjectPayload(payload)
+
+  const rawReviews =
+    arrayPayload.length > 0
+      ? arrayPayload
+      : singlePayload && isLikelyReviewRecord(singlePayload)
+        ? [singlePayload]
+        : []
+
+  const normalizedReviews = rawReviews.map((rawReview) => ({
+    review: normalizeReview(rawReview, movieId),
+    hasExplicitMovieId: hasExplicitMovieId(rawReview),
+  }))
+
+  const hasAnyExplicitMovieId = normalizedReviews.some((entry) => entry.hasExplicitMovieId)
+  const normalizedSelectedMovieId = normalizeId(movieId)
+
+  const relevantReviews = hasAnyExplicitMovieId
+    ? normalizedReviews.filter((entry) => normalizeId(entry.review.movieId) === normalizedSelectedMovieId)
+    : normalizedReviews
+
+  return {
+    reviews: relevantReviews
+      .map((entry) => entry.review)
     .filter((review) => review.isPublished)
     .sort((a, b) => {
       const aDate = Date.parse(a.publishedAt ?? '')
@@ -287,5 +437,19 @@ export async function fetchMovieReviews(movieId: string): Promise<Review[]> {
       }
 
       return bDate - aDate
-    })
+    }),
+    rawPayload: payload,
+    requestedPath,
+  }
+}
+
+// Public review fetch used by the main application
+export async function fetchMovieReviews(movieId: string): Promise<Review[]> {
+  const result = await fetchMovieReviewsInternal(movieId)
+  return result.reviews
+}
+
+// Debug fetch used when the interface needs endpoint and raw payload information
+export async function fetchMovieReviewsDebug(movieId: string): Promise<MovieReviewsDebugResult> {
+  return fetchMovieReviewsInternal(movieId)
 }

@@ -1,15 +1,16 @@
-//import { BlobServiceClient } from "@azure/storage-blob";
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode, SyntheticEvent } from "react";
-import { Link, Navigate, Route, Routes, useParams } from "react-router-dom";
-import { fetchMovieById, fetchMovieReviews, fetchMovies } from "./services/movieApi";
+import { Link, Navigate, Route, Routes, useMatch, useParams } from "react-router-dom";
+import { fetchMovieById, fetchMovieReviewsDebug, fetchMovies } from "./services/movieApi";
 import type { Movie } from "./types/Movie";
 import type { Review } from "./types/Review";
 
+// This helper makes sure user text is treated as plain text, not as a regular-expression command.
 function escapeRegex(searchTerm: string): string {
 	return searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+// This helper wraps matching text in a highlighted marker so search matches are easy to spot.
 function highlightText(text: string, searchTerm: string): ReactNode {
 	const normalizedSearchTerm = searchTerm.trim()
 
@@ -23,7 +24,7 @@ function highlightText(text: string, searchTerm: string): ReactNode {
 	return parts.map((part, index) => {
 		if (part.toLowerCase() === normalizedSearchTerm.toLowerCase()) {
 			return (
-				<mark key={`match-${part}-${index}`} className="rounded bg-200 bg-[#FFCCD2] px-0.5 text-slate-900">
+				<mark key={`match-${part}-${index}`} className="rounded-md bg-yellow-300 px-1 py-0.5 font-semibold text-slate-950 ring-1 ring-yellow-500/60">
 					{part}
 				</mark>
 			)
@@ -33,6 +34,7 @@ function highlightText(text: string, searchTerm: string): ReactNode {
 	})
 }
 
+// Converts runtime in minutes into a human-friendly sentence.
 function formatRuntime(runtime: number): string {
 	if (!runtime || runtime <= 0) {
 		return 'Runtime unavailable'
@@ -48,6 +50,7 @@ function formatRuntime(runtime: number): string {
 	return `${hours} hours ${minutes} minutes`
 }
 
+// Converts API date values into a readable date format for people.
 function formatDate(dateValue: string): string {
 	const date = new Date(dateValue)
 
@@ -62,6 +65,7 @@ function formatDate(dateValue: string): string {
 	})
 }
 
+// Applies colour styles to ratings so strong and weak ratings are visually distinct.
 function scoreTone(score: number): string {
 	if (score >= 4) {
 		return 'bg-emerald-100 text-emerald-700 ring-emerald-300'
@@ -74,21 +78,31 @@ function scoreTone(score: number): string {
 	return 'bg-rose-100 text-rose-700 ring-rose-300'
 }
 
+// Replaces broken images with a safe placeholder so the layout remains stable.
 function handleImageFallback(event: SyntheticEvent<HTMLImageElement>): void {
 	event.currentTarget.src = 'https://placehold.co/400x600/f1f5f9/334155?text=Poster+Unavailable'
 }
 
 interface AppShellProps {
 	children: ReactNode
+	headerEyebrow?: string
+	headerTitle: string
+	headerSubtitle: string
 	searchInput: string
+	searchPlaceholder: string
 	onSearchInputChange: (searchValue: string) => void
 	onSearchSubmit: () => void
 	onSearchClear: () => void
 }
 
+// Shared page frame that keeps one consistent header, search bar and footer across routes.
 function AppShell({
 	children,
+	headerEyebrow,
+	headerTitle,
+	headerSubtitle,
 	searchInput,
+	searchPlaceholder,
 	onSearchInputChange,
 	onSearchSubmit,
 	onSearchClear,
@@ -102,10 +116,12 @@ function AppShell({
 		<div className="mx-auto min-h-screen max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
 			<header className="fade-up mb-8 rounded-3xl border border-amber-200/70 bg-white/85 px-6 py-6 shadow-lg shadow-amber-100/60 backdrop-blur">
 				<div>
-					{/*<p className="text-sm font-semibold uppercase tracking-[0.2em] text-rose-600">Movie Reviews</p>*/}
-					<h1 className="mt-2 text-4xl leading-tight text-slate-900">MovieReviews</h1>
+					{headerEyebrow ? (
+						<p className="text-sm font-semibold uppercase tracking-[0.2em] text-rose-600">{headerEyebrow}</p>
+					) : null}
+					<h1 className="mt-2 text-4xl leading-tight text-slate-900">{headerTitle}</h1>
 					<p className="mt-2 text-slate-600">
-						Explore movies, compare critic ratings and read published reviews in one clean place.
+						{headerSubtitle}
 					</p>
 				</div>
 
@@ -114,7 +130,7 @@ function AppShell({
 						type="search"
 						value={searchInput}
 						onChange={(event) => onSearchInputChange(event.target.value)}
-						placeholder="Search movie title or synopsis"
+						placeholder={searchPlaceholder}
 						className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none ring-amber-300 transition focus:ring-2"
 					/>
 					<button
@@ -136,13 +152,14 @@ function AppShell({
 			{children}
 
 			<footer className="mt-10 pb-4 text-center text-sm text-slate-500">
-				Built for WEBD3000 Sprint 4 using React, TypeScript, Tailwind CSS, and your C# API.
-			</footer>
+				Built for WEBD3000 subject (Sprint 4) using React, Tailwind CSS, TypeScript and the C# A.P.I built in the previous sprint.
+				</footer>
 		</div>
 	)
 }
 
 
+// Home page: fetches all movies and filters them using the home-page search term
 function HomePage({ searchTerm }: { searchTerm: string }) {
 	const [movies, setMovies] = useState<Movie[]>([])
 	const [isLoading, setIsLoading] = useState(true)
@@ -155,7 +172,21 @@ function HomePage({ searchTerm }: { searchTerm: string }) {
 		}
 
 		return movies.filter((movie) => {
-			const searchableText = `${movie.title} ${movie.synopsis}`.toLowerCase()
+			const averageScore = movie.averageCriticScore ?? 0
+			const runtimeText = formatRuntime(movie.runtime)
+			const releaseDateText = formatDate(movie.releaseDate)
+			const searchableText = [
+				movie.title,
+				movie.synopsis,
+				movie.genre ?? '',
+				averageScore.toString(),
+				averageScore.toFixed(1),
+				movie.runtime.toString(),
+				runtimeText,
+				movie.releaseDate,
+				releaseDateText,
+			].join(' ').toLowerCase()
+
 			return searchableText.includes(normalizedSearchTerm)
 		})
 	}, [movies, normalizedSearchTerm])
@@ -203,12 +234,6 @@ function HomePage({ searchTerm }: { searchTerm: string }) {
 
 			{!isLoading && !errorMessage ? (
 				<div className="space-y-4">
-					{normalizedSearchTerm ? (
-						<p className="rounded-xl border border-slate-200 bg-white/85 px-4 py-3 text-sm text-slate-700">
-							Found {filteredMovies.length} result(s) for "{searchTerm.trim()}".
-						</p>
-					) : null}
-
 					{filteredMovies.length === 0 ? (
 						<div className="rounded-2xl border border-slate-200 bg-white/90 p-8 text-center text-slate-600 shadow-sm">
 							No movies matched your search. Try another keyword.
@@ -236,7 +261,7 @@ function HomePage({ searchTerm }: { searchTerm: string }) {
 										<span
 											className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${scoreTone(score)}`}
 										>
-											{score.toFixed(1)} / 5 Critics
+											Critics rating: {score.toFixed(1)}/5
 										</span>
 									</div>
 								</div>
@@ -256,10 +281,13 @@ function HomePage({ searchTerm }: { searchTerm: string }) {
 	)
 }
 
-function MovieDetailsPage() {
+// Movie details webpage: loads one movie and its reviews then highlights matching details-page search text
+function MovieDetailsPage({ searchTerm }: { searchTerm: string }) {
 	const { movieId } = useParams<{ movieId: string }>()
 	const [movie, setMovie] = useState<Movie | null>(null)
 	const [reviews, setReviews] = useState<Review[]>([])
+	const [rawReviewsPayload, setRawReviewsPayload] = useState<unknown>(null)
+	const [reviewsEndpointUsed, setReviewsEndpointUsed] = useState<string | null>(null)
 	const [isLoading, setIsLoading] = useState(true)
 	const [errorMessage, setErrorMessage] = useState('')
 
@@ -273,18 +301,22 @@ function MovieDetailsPage() {
 		const loadDetails = async () => {
 			try {
 				setIsLoading(true)
-				const [movieDetails, movieReviews] = await Promise.all([
+				const [movieDetails, reviewsDebug] = await Promise.all([
 					fetchMovieById(movieId),
-					fetchMovieReviews(movieId),
+					fetchMovieReviewsDebug(movieId),
 				])
 
 				if (isMounted) {
 					setMovie(movieDetails)
-					setReviews(movieReviews)
+					setReviews(reviewsDebug.reviews)
+					setRawReviewsPayload(reviewsDebug.rawPayload)
+					setReviewsEndpointUsed(reviewsDebug.requestedPath)
 				}
 			} catch {
 				if (isMounted) {
 					setErrorMessage('Unable to load this movie and its reviews from the A.P.I.')
+					setRawReviewsPayload(null)
+					setReviewsEndpointUsed(null)
 				}
 			} finally {
 				if (isMounted) {
@@ -300,17 +332,64 @@ function MovieDetailsPage() {
 		}
 	}, [movieId])
 
+	const normalizedReviewSearchTerm = searchTerm.trim().toLowerCase()
+	const detailHighlightTerm = searchTerm.trim()
+
+	const filteredReviews = useMemo(() => {
+		if (!normalizedReviewSearchTerm) {
+			return reviews
+		}
+
+		return reviews.filter((review) => {
+			const scoreText = typeof review.score === 'number' ? `${review.score} ${review.score.toFixed(1)}` : ''
+			const searchableText = [
+				review.title ?? '',
+				review.criticName,
+				review.comment,
+				review.publishedAt ?? '',
+				review.timePublishedAgo ?? '',
+				scoreText,
+			].join(' ').toLowerCase()
+
+			return searchableText.includes(normalizedReviewSearchTerm)
+		})
+	}, [reviews, normalizedReviewSearchTerm])
+
+	const reviewsToDisplay = useMemo(() => {
+		if (!normalizedReviewSearchTerm) {
+			return reviews
+		}
+
+		return filteredReviews.length > 0 ? filteredReviews : reviews
+	}, [reviews, filteredReviews, normalizedReviewSearchTerm])
+
+	useEffect(() => {
+		if (!movieId) {
+			return
+		}
+
+		console.log('[MovieReviews Debug]', {
+			movieId,
+			reviewsEndpointUsed: reviewsEndpointUsed ?? 'No matching endpoint returned data',
+			rawReviewsPayload,
+		})
+	}, [movieId, rawReviewsPayload, reviewsEndpointUsed])
+
 	const averageScore = useMemo(() => {
 		if (movie?.averageCriticScore !== undefined) {
 			return movie.averageCriticScore
 		}
 
-		if (reviews.length === 0) {
+		const scoredReviews = reviews.filter(
+			(review): review is Review & { score: number } => typeof review.score === 'number' && Number.isFinite(review.score),
+		)
+
+		if (scoredReviews.length === 0) {
 			return 0
 		}
 
-		const total = reviews.reduce((sum, review) => sum + review.score, 0)
-		return Number((total / reviews.length).toFixed(1))
+		const total = scoredReviews.reduce((sum, review) => sum + review.score, 0)
+		return Number((total / scoredReviews.length).toFixed(1))
 	}, [movie, reviews])
 
 	if (!movieId) {
@@ -319,7 +398,7 @@ function MovieDetailsPage() {
 
 	return (
 		<section className="fade-up space-y-6">
-			<Link to="/" className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-slate-900">
+			<Link to="/" className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-slate-900 underline">
 				Back to all movies
 			</Link>
 
@@ -347,23 +426,23 @@ function MovieDetailsPage() {
 
 						<div className="space-y-5 p-6">
 							<div className="flex flex-wrap items-center gap-3">
-								<h2 className="text-4xl text-slate-900">{movie.title}</h2>
+								<h2 className="text-4xl text-slate-900">{highlightText(movie.title, detailHighlightTerm)}</h2>
 								<span className={`rounded-full px-3 py-1 text-sm font-semibold ring-1 ${scoreTone(averageScore)}`}>
-									{averageScore.toFixed(1)} / 5 Average
+									Average rating: {averageScore.toFixed(1)}/5
 								</span>
 							</div>
 
-							<p className="text-slate-700">{movie.synopsis}</p>
+							<p className="text-slate-700">{highlightText(movie.synopsis, detailHighlightTerm)}</p>
 
 							<dl className="grid grid-cols-1 gap-4 text-sm text-slate-600 sm:grid-cols-2">
 								<div className="rounded-xl bg-amber-50 p-4">
 									<dt className="font-semibold uppercase tracking-wide text-amber-700">Runtime</dt>
-									<dd className="mt-1 text-slate-800">{formatRuntime(movie.runtime)}</dd>
+									<dd className="mt-1 text-slate-800">{highlightText(formatRuntime(movie.runtime), detailHighlightTerm)}</dd>
 								</div>
 
 								<div className="rounded-xl bg-orange-50 p-4">
 									<dt className="font-semibold uppercase tracking-wide text-orange-700">Release Date</dt>
-									<dd className="mt-1 text-slate-800">{formatDate(movie.releaseDate)}</dd>
+									<dd className="mt-1 text-slate-800">{highlightText(formatDate(movie.releaseDate), detailHighlightTerm)}</dd>
 								</div>
 							</dl>
 						</div>
@@ -378,52 +457,119 @@ function MovieDetailsPage() {
 							</p>
 						) : (
 							<div className="mt-5 space-y-4">
-								{reviews.map((review) => (
-									<article
-										key={review.id}
-										className="rounded-2xl border border-slate-200/90 bg-white px-5 py-4 transition hover:border-slate-300"
-									>
-										<div className="flex flex-wrap items-center justify-between gap-2">
-											<p className="text-lg font-semibold text-slate-900">{review.criticName}</p>
-											<span className={`rounded-full px-3 py-1 text-sm font-semibold ring-1 ${scoreTone(review.score)}`}>
-												{review.score.toFixed(1)} / 5
-											</span>
-										</div>
-										<p className="mt-3 text-slate-700">{review.comment}</p>
-									</article>
-								))}
+								{reviewsToDisplay.map((review) => {
+									const hasScore = typeof review.score === 'number' && Number.isFinite(review.score)
+									const publishedLabel = review.timePublishedAgo || (review.publishedAt ? formatDate(review.publishedAt) : '')
+
+									return (
+										<article
+											key={review.id}
+											className="rounded-2xl border border-slate-200/90 bg-white px-5 py-4 transition hover:border-slate-300"
+										>
+											{review.title ? (
+												<p className="text-base font-semibold text-slate-900">{highlightText(review.title, detailHighlightTerm)}</p>
+											) : null}
+
+											<div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+												<p className="text-lg font-semibold text-slate-900">{highlightText(review.criticName, detailHighlightTerm)}</p>
+												{hasScore ? (
+													<span className={`rounded-full px-3 py-1 text-sm font-semibold ring-1 ${scoreTone(review.score ?? 0)}`}>
+														{(review.score ?? 0).toFixed(1)} / 5
+													</span>
+												) : null}
+											</div>
+
+											{publishedLabel ? (
+												<p className="mt-2 text-xs uppercase tracking-wide text-slate-500">{highlightText(publishedLabel, detailHighlightTerm)}</p>
+											) : null}
+
+											<p className="mt-3 text-slate-700">{highlightText(review.comment, detailHighlightTerm)}</p>
+										</article>
+									)
+								})}
 							</div>
 						)}
 					</article>
+
 				</div>
 			) : null}
 		</section>
 	)
 }
 
+// Top-level route controller that keeps separate search state for the homepage and each movie details webpage
 export default function App() {
-	const [searchInput, setSearchInput] = useState('')
-	const [searchTerm, setSearchTerm] = useState('')
+	const [homeSearchInput, setHomeSearchInput] = useState('')
+	const [homeSearchTerm, setHomeSearchTerm] = useState('')
+	const [detailsSearchInput, setDetailsSearchInput] = useState('')
+	const [detailsSearchTerm, setDetailsSearchTerm] = useState('')
+
+	const movieDetailsMatch = useMatch('/movies/:movieId')
+	const movieId = movieDetailsMatch?.params.movieId ?? ''
+	const isMovieDetailsRoute = Boolean(movieDetailsMatch)
+
+	useEffect(() => {
+		if (!movieId) {
+			return
+		}
+
+		setDetailsSearchInput('')
+		setDetailsSearchTerm('')
+	}, [movieId])
+
+	const activeSearchInput = isMovieDetailsRoute ? detailsSearchInput : homeSearchInput
+	const activeHeaderEyebrow = isMovieDetailsRoute ? '' : 'Find a movie'
+	const activeHeaderTitle = isMovieDetailsRoute ? 'Movie Details Search' : 'MovieReviews'
+	const activeHeaderSubtitle = isMovieDetailsRoute
+		? 'Search this movie details and reviews by title, synopsis, critic or publish date.'
+		: 'Explore movies, compare critic ratings and read published reviews in one clean place.'
+	const activeSearchPlaceholder = isMovieDetailsRoute
+		? "Search this movie details and reviews by title, synopsis, critic, rating or publish date..."
+		: "Search by title, synopsis, genre, rating, runtime or release date..."
+
+	const handleSearchInputChange = (value: string) => {
+		if (isMovieDetailsRoute) {
+			setDetailsSearchInput(value)
+			return
+		}
+
+		setHomeSearchInput(value)
+	}
 
 	const handleSearchSubmit = () => {
-		setSearchTerm(searchInput.trim())
+		if (isMovieDetailsRoute) {
+			setDetailsSearchTerm(detailsSearchInput.trim())
+			return
+		}
+
+		setHomeSearchTerm(homeSearchInput.trim())
 	}
 
 	const handleSearchClear = () => {
-		setSearchInput('')
-		setSearchTerm('')
+		if (isMovieDetailsRoute) {
+			setDetailsSearchInput('')
+			setDetailsSearchTerm('')
+			return
+		}
+
+		setHomeSearchInput('')
+		setHomeSearchTerm('')
 	}
 
 	return (
 		<AppShell
-			searchInput={searchInput}
-			onSearchInputChange={setSearchInput}
+			headerEyebrow={activeHeaderEyebrow}
+			headerTitle={activeHeaderTitle}
+			headerSubtitle={activeHeaderSubtitle}
+			searchInput={activeSearchInput}
+			searchPlaceholder={activeSearchPlaceholder}
+			onSearchInputChange={handleSearchInputChange}
 			onSearchSubmit={handleSearchSubmit}
 			onSearchClear={handleSearchClear}
 		>
 			<Routes>
-				<Route path="/" element={<HomePage searchTerm={searchTerm} />} />
-				<Route path="/movies/:movieId" element={<MovieDetailsPage />} />
+				<Route path="/" element={<HomePage searchTerm={homeSearchTerm} />} />
+				<Route path="/movies/:movieId" element={<MovieDetailsPage searchTerm={detailsSearchTerm} />} />
 				<Route path="*" element={<Navigate to="/" replace />} />
 			</Routes>
 		</AppShell>
