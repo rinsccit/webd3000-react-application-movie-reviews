@@ -9,7 +9,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
-      // Sends local /api calls to the backend service running on localhost:7195
+      // Sends local '/api' calls to the backend service running on localhost:7195
       "/api": {
         target:"https://localhost:7195",
         changeOrigin: true,

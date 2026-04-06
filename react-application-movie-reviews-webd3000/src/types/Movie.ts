@@ -1,4 +1,4 @@
-// Defines one movie record exactly as the frontend expects to consume it
+// Defines one movie record exactly as the frontend expects to use it
 export interface Movie {
     id: string,
     title: string,

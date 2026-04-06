@@ -1,10 +1,10 @@
 import type { Movie } from '../types/Movie'
 import type { Review } from '../types/Review'
 
-// All A.P.I calls start from this base path. In development, Vite forwards /api to the local backend.
+// All A.P.I calls start from this base path. In development, Vite forwards '/api' to the local backend
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
-// Custom error type so the rest of the application can react to H.T.T.P status codes.
+// Custom error type so the rest of the application can react to H.T.T.P status codes
 class ApiResponseError extends Error {
   status: number
 
@@ -14,12 +14,12 @@ class ApiResponseError extends Error {
   }
 }
 
-// Confirms that a value is an object-like record before trying to read named fields from it.
+// Confirms that a value is an object-like record before trying to read named fields from it
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
-// Tries several field names because backend payloads can vary between environments.
+// Tries several field names because backend payloads can vary between environments
 function getField(record: Record<string, unknown>, keys: string[]): unknown {
   for (const key of keys) {
     const value = record[key]
@@ -31,7 +31,7 @@ function getField(record: Record<string, unknown>, keys: string[]): unknown {
   return undefined
 }
 
-// Safely converts unknown values to text for display.
+// Safely converts unknown values to text for display
 function asString(value: unknown, fallback = ''): string {
   if (typeof value === 'string') {
     return value
@@ -44,7 +44,7 @@ function asString(value: unknown, fallback = ''): string {
   return fallback
 }
 
-// Safely converts unknown values to numbers for calculations.
+// Safely converts unknown values to numbers for calculations
 function asNumber(value: unknown, fallback = 0): number {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value
@@ -75,7 +75,7 @@ function asGenre(value: unknown): string {
   return ''
 }
 
-// Converts different publish-status styles into one true-or-false value.
+// Converts different publish-status styles into one true-or-false value
 function asBoolean(value: unknown, fallback = true): boolean {
   if (typeof value === 'boolean') {
     return value
@@ -96,7 +96,7 @@ function asBoolean(value: unknown, fallback = true): boolean {
   return fallback
 }
 
-// Finds an array payload even when the backend wraps it in another object.
+// Finds an array payload even when the backend wraps it in another object
 function getArrayPayload(payload: unknown): unknown[] {
   if (Array.isArray(payload)) {
     return payload
@@ -115,7 +115,7 @@ function getArrayPayload(payload: unknown): unknown[] {
     }
   }
 
-  // Some A.P.Is wrap arrays under custom property names.
+  // Some A.P.Is wrap arrays under custom property names
   for (const value of Object.values(payload)) {
     if (Array.isArray(value)) {
       return value
@@ -125,7 +125,7 @@ function getArrayPayload(payload: unknown): unknown[] {
   return []
 }
 
-// Detects whether an object probably represents a review.
+// Detects whether an object probably represents a review
 function isLikelyReviewRecord(record: Record<string, unknown>): boolean {
   const reviewHints = [
     'criticName',
@@ -169,12 +169,12 @@ function hasExplicitMovieId(rawReview: Record<string, unknown>): boolean {
   return true
 }
 
-// Normalizes IDs for reliable text comparison.
+// Normalizes IDs for reliable text comparison
 function normalizeId(value: string): string {
   return value.trim().toLowerCase()
 }
 
-// Finds one object payload even if the backend wraps it in a data container.
+// Finds one object payload even if the backend wraps it in a data container
 function getObjectPayload(payload: unknown): Record<string, unknown> | null {
   if (isRecord(payload)) {
     if ('id' in payload || 'title' in payload || 'synopsis' in payload) {
@@ -248,14 +248,14 @@ function getAverageScore(reviews: Review[]): number {
   return Number((total/scoredReviews.length).toFixed(1))
 }
 
-// Debug result shape used to inspect raw payloads during troubleshooting.
+// Debug result shape used to inspect raw payloads during troubleshooting
 interface MovieReviewsDebugResult {
   reviews: Review[]
   rawPayload: unknown
   requestedPath: string | null
 }
 
-// Performs one H.T.T.P request and returns parsed J.S.O.N or null for empty responses.
+// Performs one H.T.T.P request and returns parsed J.S.O.N or null for empty responses
 async function requestJson(path: string): Promise<unknown> {
   const response = await fetch(path)
 
@@ -286,7 +286,7 @@ async function requestFirstAvailable(paths: string[]): Promise<unknown> {
     } catch (error) {
       lastError = error
       if (error instanceof ApiResponseError) {
-        // Endpoints can differ across environments; keep trying fallbacks.
+        // Endpoints can differ across environments so keep trying fallbacks
         continue
       }
 
@@ -297,7 +297,7 @@ async function requestFirstAvailable(paths: string[]): Promise<unknown> {
   throw lastError ?? new Error('No endpoint returned data.')
 }
 
-// Loads all movies and ensures every movie has an average critic score.
+// Loads all movies and ensures every movie has an average critic score
 export async function fetchMovies(): Promise<Movie[]> {
   const payload = await requestJson(`${API_BASE_URL}/movies`)
   const rawMovies = getArrayPayload(payload).filter(isRecord)

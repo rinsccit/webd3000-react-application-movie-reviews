@@ -13,7 +13,7 @@ dist
 dist-ssr
 *.local
 
-# Ignore local editor and operating-system files that should not be shared
+# Ignore local editor and operating system files that should not be shared
 .vscode/*
 !.vscode/extensions.json
 .idea

@@ -1,16 +1,61 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode, SyntheticEvent } from "react";
 import { Link, Navigate, Route, Routes, useMatch, useParams } from "react-router-dom";
-import { fetchMovieById, fetchMovieReviewsDebug, fetchMovies } from "./services/movieApi";
+import { fetchMovieById, fetchMovieReviews, fetchMovieReviewsDebug, fetchMovies } from "./services/movieApi";
 import type { Movie } from "./types/Movie";
 import type { Review } from "./types/Review";
 
-// This helper makes sure user text is treated as plain text, not as a regular-expression command.
+const FAVOURITE_MOVIES_STORAGE_KEY = 'movie-reviews.favourite-movie-ids'
+
+// Reads favourite movie IDs from localStorage and returns a safe normalized list
+function loadFavouriteMovieIds(): string[] {
+	if (typeof window === 'undefined') {
+		return []
+	}
+
+	try {
+		const storedValue = window.localStorage.getItem(FAVOURITE_MOVIES_STORAGE_KEY)
+
+		if (!storedValue) {
+			return []
+		}
+
+		const parsedValue = JSON.parse(storedValue) as unknown
+
+		if (!Array.isArray(parsedValue)) {
+			return []
+		}
+
+		const validIds = parsedValue
+			.filter((entry): entry is string => typeof entry === 'string')
+			.map((entry) => entry.trim())
+			.filter((entry) => entry.length > 0)
+
+		return Array.from(new Set(validIds))
+	} catch {
+		return []
+	}
+}
+
+// Saves favourite movie IDs to localStorage so the selection survives page reloads
+function saveFavouriteMovieIds(favouriteMovieIds: string[]): void {
+	if (typeof window === 'undefined') {
+		return
+	}
+
+	try {
+		window.localStorage.setItem(FAVOURITE_MOVIES_STORAGE_KEY, JSON.stringify(favouriteMovieIds))
+	} catch {
+		// Ignore storage errors so the rest of the app remains usable.
+	}
+}
+
+// This helper makes sure user text is treated as plain text and not as a regular-expression command
 function escapeRegex(searchTerm: string): string {
 	return searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-// This helper wraps matching text in a highlighted marker so search matches are easy to spot.
+// This helper wraps matching text in a highlighted marker so search matches are easy to spot
 function highlightText(text: string, searchTerm: string): ReactNode {
 	const normalizedSearchTerm = searchTerm.trim()
 
@@ -34,7 +79,7 @@ function highlightText(text: string, searchTerm: string): ReactNode {
 	})
 }
 
-// Converts runtime in minutes into a human-friendly sentence.
+// Converts runtime in minutes into a human-friendly sentence
 function formatRuntime(runtime: number): string {
 	if (!runtime || runtime <= 0) {
 		return 'Runtime unavailable'
@@ -50,7 +95,7 @@ function formatRuntime(runtime: number): string {
 	return `${hours} hours ${minutes} minutes`
 }
 
-// Converts API date values into a readable date format for people.
+// Converts A.P.I date values into a readable date format for users
 function formatDate(dateValue: string): string {
 	const date = new Date(dateValue)
 
@@ -65,7 +110,7 @@ function formatDate(dateValue: string): string {
 	})
 }
 
-// Applies colour styles to ratings so strong and weak ratings are visually distinct.
+// Applies colour styles to ratings so strong and weak ratings are visually distinct
 function scoreTone(score: number): string {
 	if (score >= 4) {
 		return 'bg-emerald-100 text-emerald-700 ring-emerald-300'
@@ -78,7 +123,49 @@ function scoreTone(score: number): string {
 	return 'bg-rose-100 text-rose-700 ring-rose-300'
 }
 
-// Replaces broken images with a safe placeholder so the layout remains stable.
+// Normalizes critic names so comparisons remain reliable regardless of case or spacing
+function normalizeCriticName(criticName: string): string {
+	return criticName.trim().toLowerCase()
+}
+
+// Returns the critic names (normalized) with the highest review-count, used for the Top Rated tag
+function getTopRatedCritics(reviews: Review[]): Set<string> {
+	const counts = new Map<string, number>()
+
+	for (const review of reviews) {
+		const normalizedName = normalizeCriticName(review.criticName)
+
+		if (!normalizedName) {
+			continue
+		}
+
+		counts.set(normalizedName, (counts.get(normalizedName) ?? 0) + 1)
+	}
+
+	let highestCount = 0
+
+	for (const count of counts.values()) {
+		if (count > highestCount) {
+			highestCount = count
+		}
+	}
+
+	if (highestCount <= 1) {
+		return new Set<string>()
+	}
+
+	const topCritics = new Set<string>()
+
+	for (const [criticName, count] of counts.entries()) {
+		if (count === highestCount) {
+			topCritics.add(criticName)
+		}
+	}
+
+	return topCritics
+}
+
+// Replaces broken images with a safe placeholder so the layout remains stable
 function handleImageFallback(event: SyntheticEvent<HTMLImageElement>): void {
 	event.currentTarget.src = 'https://placehold.co/400x600/f1f5f9/334155?text=Poster+Unavailable'
 }
@@ -95,7 +182,7 @@ interface AppShellProps {
 	onSearchClear: () => void
 }
 
-// Shared page frame that keeps one consistent header, search bar and footer across routes.
+// Shared page frame that keeps one consistent header, search bar and footer across routes
 function AppShell({
 	children,
 	headerEyebrow,
@@ -159,19 +246,47 @@ function AppShell({
 }
 
 
+interface HomePageProps {
+	searchTerm: string
+	favouriteMovieIds: string[]
+	onToggleFavourite: (movieId: string) => void
+}
+
 // Home page: fetches all movies and filters them using the home-page search term
-function HomePage({ searchTerm }: { searchTerm: string }) {
+function HomePage({ searchTerm, favouriteMovieIds, onToggleFavourite }: HomePageProps) {
 	const [movies, setMovies] = useState<Movie[]>([])
 	const [isLoading, setIsLoading] = useState(true)
 	const [errorMessage, setErrorMessage] = useState('')
+	const [genreFilter, setGenreFilter] = useState('all')
+	const [minimumRatingFilter, setMinimumRatingFilter] = useState('0')
+	const [maximumRuntimeFilter, setMaximumRuntimeFilter] = useState('0')
+	const [sortFilter, setSortFilter] = useState('default')
 	const normalizedSearchTerm = searchTerm.trim().toLowerCase()
 
-	const filteredMovies = useMemo(() => {
-		if (!normalizedSearchTerm) {
-			return movies
+	// Builds the genre dropdown values from currently loaded movies
+	const availableGenres = useMemo(() => {
+		const genres = new Set<string>()
+
+		for (const movie of movies) {
+			const genreParts = (movie.genre ?? '')
+				.split(',')
+				.map((genre) => genre.trim())
+				.filter(Boolean)
+
+			for (const genre of genreParts) {
+				genres.add(genre)
+			}
 		}
 
-		return movies.filter((movie) => {
+		return Array.from(genres).sort((a, b) => a.localeCompare(b))
+	}, [movies])
+
+	// Applies search + advanced filters first then applies the selected sort order
+	const filteredMovies = useMemo(() => {
+		const minimumScore = Number(minimumRatingFilter)
+		const maximumRuntime = Number(maximumRuntimeFilter)
+
+		const filtered = movies.filter((movie) => {
 			const averageScore = movie.averageCriticScore ?? 0
 			const runtimeText = formatRuntime(movie.runtime)
 			const releaseDateText = formatDate(movie.releaseDate)
@@ -187,9 +302,61 @@ function HomePage({ searchTerm }: { searchTerm: string }) {
 				releaseDateText,
 			].join(' ').toLowerCase()
 
-			return searchableText.includes(normalizedSearchTerm)
+			const searchMatches = !normalizedSearchTerm || searchableText.includes(normalizedSearchTerm)
+			const movieGenres = (movie.genre ?? '')
+				.split(',')
+				.map((genre) => genre.trim().toLowerCase())
+				.filter(Boolean)
+			const genreMatches = genreFilter === 'all' || movieGenres.includes(genreFilter.toLowerCase())
+			const ratingMatches = averageScore >= minimumScore
+			const runtimeMatches = maximumRuntime <= 0 || movie.runtime <= maximumRuntime
+
+			return searchMatches && genreMatches && ratingMatches && runtimeMatches
 		})
-	}, [movies, normalizedSearchTerm])
+
+		if (sortFilter === 'rating-desc') {
+			return [...filtered].sort((a, b) => (b.averageCriticScore ?? 0) - (a.averageCriticScore ?? 0))
+		}
+
+		if (sortFilter === 'runtime-asc') {
+			return [...filtered].sort((a, b) => a.runtime - b.runtime)
+		}
+
+		if (sortFilter === 'release-desc') {
+			return [...filtered].sort((a, b) => {
+				const aDate = Date.parse(a.releaseDate)
+				const bDate = Date.parse(b.releaseDate)
+
+				if (Number.isNaN(aDate) && Number.isNaN(bDate)) {
+					return 0
+				}
+
+				if (Number.isNaN(aDate)) {
+					return 1
+				}
+
+				if (Number.isNaN(bDate)) {
+					return -1
+				}
+
+				return bDate - aDate
+			})
+		}
+
+		if (sortFilter === 'title-asc') {
+			return [...filtered].sort((a, b) => a.title.localeCompare(b.title))
+		}
+
+		return filtered
+	}, [movies, normalizedSearchTerm, genreFilter, minimumRatingFilter, maximumRuntimeFilter, sortFilter])
+
+	// Resets only the advanced filters and this does not clear the global search bar input
+	const clearAdvancedFilters = () => {
+		setGenreFilter('all')
+		setMinimumRatingFilter('0')
+		setMaximumRuntimeFilter('0')
+		setSortFilter('default')
+	}
 
 	useEffect(() => {
 		let isMounted = true
@@ -234,43 +401,113 @@ function HomePage({ searchTerm }: { searchTerm: string }) {
 
 			{!isLoading && !errorMessage ? (
 				<div className="space-y-4">
+					<div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+						<p className="text-sm font-semibold uppercase tracking-wide text-slate-700">Advanced filters</p>
+						<div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+							<select
+								value={genreFilter}
+								onChange={(event) => setGenreFilter(event.target.value)}
+								className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 outline-none ring-amber-300 transition focus:ring-2"
+							>
+								<option value="all">All genres</option>
+								{availableGenres.map((genre) => (
+									<option key={genre} value={genre}>{genre}</option>
+								))}
+							</select>
+
+							<select
+								value={minimumRatingFilter}
+								onChange={(event) => setMinimumRatingFilter(event.target.value)}
+								className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 outline-none ring-amber-300 transition focus:ring-2"
+							>
+								<option value="0">Any rating</option>
+								<option value="1">1.0+ rating</option>
+								<option value="2">2.0+ rating</option>
+								<option value="3">3.0+ rating</option>
+								<option value="4">4.0+ rating</option>
+							</select>
+
+							<select
+								value={maximumRuntimeFilter}
+								onChange={(event) => setMaximumRuntimeFilter(event.target.value)}
+								className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 outline-none ring-amber-300 transition focus:ring-2"
+							>
+								<option value="0">Any runtime</option>
+								<option value="90">Up to 90 min</option>
+								<option value="120">Up to 120 min</option>
+								<option value="150">Up to 150 min</option>
+								<option value="180">Up to 180 min</option>
+							</select>
+
+							<select
+								value={sortFilter}
+								onChange={(event) => setSortFilter(event.target.value)}
+								className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 outline-none ring-amber-300 transition focus:ring-2"
+							>
+								<option value="default">Default order</option>
+								<option value="rating-desc">Highest rating first</option>
+								<option value="release-desc">Newest release first</option>
+								<option value="runtime-asc">Shortest runtime first</option>
+								<option value="title-asc">Title A-Z</option>
+							</select>
+
+							<button
+								type="button"
+								onClick={clearAdvancedFilters}
+								className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+							>
+								Reset filters
+							</button>
+						</div>
+					</div>
+
 					{filteredMovies.length === 0 ? (
 						<div className="rounded-2xl border border-slate-200 bg-white/90 p-8 text-center text-slate-600 shadow-sm">
-							No movies matched your search. Try another keyword.
+							No movies matched your search and filters. Try another combination.
 						</div>
 					) : (
 						<div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
 							{filteredMovies.map((movie, index) => {
 						const score = movie.averageCriticScore ?? 0
+						const isFavourite = favouriteMovieIds.includes(movie.id)
 
 						return (
-							<Link
+							<article
 								key={movie.id}
-								to={`/movies/${movie.id}`}
-								className="group fade-up overflow-hidden rounded-3xl border border-slate-200/80 bg-white/90 shadow-md shadow-slate-200/60 transition hover:-translate-y-1 hover:shadow-xl"
+								className="group fade-up relative overflow-hidden rounded-3xl border border-slate-200/80 bg-white/90 shadow-md shadow-slate-200/60 transition hover:-translate-y-1 hover:shadow-xl"
 								style={{ animationDelay: `${index * 80}ms` }}
 							>
-								<div className="relative h-96 overflow-hidden bg-slate-100">
-									<img
-										src={movie.image}
-										alt={`${movie.title} poster`}
-										className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-										onError={handleImageFallback}
-									/>
-									<div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-900/80 to-transparent p-4">
-										<span
-											className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${scoreTone(score)}`}
-										>
-											Critics rating: {score.toFixed(1)}/5
-										</span>
-									</div>
-								</div>
+								<button
+									type="button"
+									onClick={() => onToggleFavourite(movie.id)}
+									className={`absolute right-3 top-3 z-10 rounded-full px-3 py-1 text-xs font-semibold ring-1 backdrop-blur transition ${isFavourite ? 'bg-rose-100 text-rose-700 ring-rose-300 hover:bg-rose-200' : 'bg-white/90 text-slate-700 ring-slate-300 hover:bg-slate-100'}`}
+								>
+									{isFavourite ? 'Added to Favourites' : 'Add to Favourite'}
+								</button>
 
-								<div className="space-y-2 px-5 py-4">
-									<h2 className="text-2xl text-slate-900">{highlightText(movie.title, searchTerm)}</h2>
-									<p className="line-clamp-3 text-sm text-slate-600">{highlightText(movie.synopsis, searchTerm)}</p>
-								</div>
-							</Link>
+								<Link to={`/movies/${movie.id}`} className="block">
+									<div className="relative h-96 overflow-hidden bg-slate-100">
+										<img
+											src={movie.image}
+											alt={`${movie.title} poster`}
+											className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+											onError={handleImageFallback}
+										/>
+										<div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-900/80 to-transparent p-4">
+											<span
+												className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${scoreTone(score)}`}
+											>
+												Critics rating: {score.toFixed(1)}/5
+											</span>
+										</div>
+									</div>
+
+									<div className="space-y-2 px-5 py-4">
+										<h2 className="text-2xl text-slate-900">{highlightText(movie.title, searchTerm)}</h2>
+										<p className="line-clamp-3 text-sm text-slate-600">{highlightText(movie.synopsis, searchTerm)}</p>
+									</div>
+								</Link>
+							</article>
 						)
 							})}
 						</div>
@@ -281,11 +518,18 @@ function HomePage({ searchTerm }: { searchTerm: string }) {
 	)
 }
 
+interface MovieDetailsPageProps {
+	searchTerm: string
+	favouriteMovieIds: string[]
+	onToggleFavourite: (movieId: string) => void
+}
+
 // Movie details webpage: loads one movie and its reviews then highlights matching details-page search text
-function MovieDetailsPage({ searchTerm }: { searchTerm: string }) {
+function MovieDetailsPage({ searchTerm, favouriteMovieIds, onToggleFavourite }: MovieDetailsPageProps) {
 	const { movieId } = useParams<{ movieId: string }>()
 	const [movie, setMovie] = useState<Movie | null>(null)
 	const [reviews, setReviews] = useState<Review[]>([])
+	const [topRatedCritics, setTopRatedCritics] = useState<Set<string>>(new Set<string>())
 	const [rawReviewsPayload, setRawReviewsPayload] = useState<unknown>(null)
 	const [reviewsEndpointUsed, setReviewsEndpointUsed] = useState<string | null>(null)
 	const [isLoading, setIsLoading] = useState(true)
@@ -331,6 +575,39 @@ function MovieDetailsPage({ searchTerm }: { searchTerm: string }) {
 			isMounted = false
 		}
 	}, [movieId])
+
+	// Calculates top rated critics by counting review totals across all movies
+	useEffect(() => {
+		let isMounted = true
+
+		const loadTopRatedCritics = async () => {
+			try {
+				const movies = await fetchMovies()
+				const reviewResults = await Promise.allSettled(movies.map((movieEntry) => fetchMovieReviews(movieEntry.id)))
+				const allReviews: Review[] = []
+
+				for (const result of reviewResults) {
+					if (result.status === 'fulfilled') {
+						allReviews.push(...result.value)
+					}
+				}
+
+				if (isMounted) {
+					setTopRatedCritics(getTopRatedCritics(allReviews))
+				}
+			} catch {
+				if (isMounted) {
+					setTopRatedCritics(new Set<string>())
+				}
+			}
+		}
+
+		void loadTopRatedCritics()
+
+		return () => {
+			isMounted = false
+		}
+	}, [])
 
 	const normalizedReviewSearchTerm = searchTerm.trim().toLowerCase()
 	const detailHighlightTerm = searchTerm.trim()
@@ -430,6 +707,13 @@ function MovieDetailsPage({ searchTerm }: { searchTerm: string }) {
 								<span className={`rounded-full px-3 py-1 text-sm font-semibold ring-1 ${scoreTone(averageScore)}`}>
 									Average rating: {averageScore.toFixed(1)}/5
 								</span>
+								<button
+									type="button"
+									onClick={() => onToggleFavourite(movie.id)}
+									className={`rounded-full px-3 py-1 text-sm font-semibold ring-1 transition ${favouriteMovieIds.includes(movie.id) ? 'bg-rose-100 text-rose-700 ring-rose-300 hover:bg-rose-200' : 'bg-slate-100 text-slate-700 ring-slate-300 hover:bg-slate-200'}`}
+								>
+									{favouriteMovieIds.includes(movie.id) ? 'Added to Favourites' : 'Add to Favourite'}
+								</button>
 							</div>
 
 							<p className="text-slate-700">{highlightText(movie.synopsis, detailHighlightTerm)}</p>
@@ -459,6 +743,7 @@ function MovieDetailsPage({ searchTerm }: { searchTerm: string }) {
 							<div className="mt-5 space-y-4">
 								{reviewsToDisplay.map((review) => {
 									const hasScore = typeof review.score === 'number' && Number.isFinite(review.score)
+									const isTopRatedCritic = topRatedCritics.has(normalizeCriticName(review.criticName))
 									const publishedLabel = review.timePublishedAgo || (review.publishedAt ? formatDate(review.publishedAt) : '')
 
 									return (
@@ -471,7 +756,14 @@ function MovieDetailsPage({ searchTerm }: { searchTerm: string }) {
 											) : null}
 
 											<div className="mt-1 flex flex-wrap items-center justify-between gap-2">
-												<p className="text-lg font-semibold text-slate-900">{highlightText(review.criticName, detailHighlightTerm)}</p>
+												<div className="flex items-center gap-2">
+													<p className="text-lg font-semibold text-slate-900">{highlightText(review.criticName, detailHighlightTerm)}</p>
+													{isTopRatedCritic ? (
+														<span className="rounded-full bg-sky-100 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-sky-700 ring-1 ring-sky-300">
+															Top Rated
+														</span>
+													) : null}
+												</div>
 												{hasScore ? (
 													<span className={`rounded-full px-3 py-1 text-sm font-semibold ring-1 ${scoreTone(review.score ?? 0)}`}>
 														{(review.score ?? 0).toFixed(1)} / 5
@@ -503,6 +795,7 @@ export default function App() {
 	const [homeSearchTerm, setHomeSearchTerm] = useState('')
 	const [detailsSearchInput, setDetailsSearchInput] = useState('')
 	const [detailsSearchTerm, setDetailsSearchTerm] = useState('')
+	const [favouriteMovieIds, setFavouriteMovieIds] = useState<string[]>(() => loadFavouriteMovieIds())
 
 	const movieDetailsMatch = useMatch('/movies/:movieId')
 	const movieId = movieDetailsMatch?.params.movieId ?? ''
@@ -516,6 +809,10 @@ export default function App() {
 		setDetailsSearchInput('')
 		setDetailsSearchTerm('')
 	}, [movieId])
+
+	useEffect(() => {
+		saveFavouriteMovieIds(favouriteMovieIds)
+	}, [favouriteMovieIds])
 
 	const activeSearchInput = isMovieDetailsRoute ? detailsSearchInput : homeSearchInput
 	const activeHeaderEyebrow = isMovieDetailsRoute ? '' : 'Find a movie'
@@ -556,6 +853,17 @@ export default function App() {
 		setHomeSearchTerm('')
 	}
 
+	// Adds/removes one movie ID from the favourites list and keeps order stable.
+	const handleToggleFavourite = (movieIdToToggle: string) => {
+		setFavouriteMovieIds((currentFavourites) => {
+			if (currentFavourites.includes(movieIdToToggle)) {
+				return currentFavourites.filter((favouriteMovieId) => favouriteMovieId !== movieIdToToggle)
+			}
+
+			return [...currentFavourites, movieIdToToggle]
+		})
+	}
+
 	return (
 		<AppShell
 			headerEyebrow={activeHeaderEyebrow}
@@ -568,8 +876,26 @@ export default function App() {
 			onSearchClear={handleSearchClear}
 		>
 			<Routes>
-				<Route path="/" element={<HomePage searchTerm={homeSearchTerm} />} />
-				<Route path="/movies/:movieId" element={<MovieDetailsPage searchTerm={detailsSearchTerm} />} />
+				<Route
+					path="/"
+					element={
+						<HomePage
+							searchTerm={homeSearchTerm}
+							favouriteMovieIds={favouriteMovieIds}
+							onToggleFavourite={handleToggleFavourite}
+						/>
+					}
+				/>
+				<Route
+					path="/movies/:movieId"
+					element={
+						<MovieDetailsPage
+							searchTerm={detailsSearchTerm}
+							favouriteMovieIds={favouriteMovieIds}
+							onToggleFavourite={handleToggleFavourite}
+						/>
+					}
+				/>
 				<Route path="*" element={<Navigate to="/" replace />} />
 			</Routes>
 		</AppShell>
