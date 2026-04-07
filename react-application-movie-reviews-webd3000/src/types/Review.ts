@@ -4,6 +4,7 @@ export interface Review {
   movieId: string
   title?: string
   criticName: string
+  criticAvatarUrl?: string
   score?: number
   comment: string
   isPublished: boolean

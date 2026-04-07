@@ -170,6 +170,11 @@ function handleImageFallback(event: SyntheticEvent<HTMLImageElement>): void {
 	event.currentTarget.src = 'https://placehold.co/400x600/f1f5f9/334155?text=Poster+Unavailable'
 }
 
+// Replaces broken critic avatars with an initials-style placeholder image
+function handleCriticAvatarFallback(event: SyntheticEvent<HTMLImageElement>): void {
+	event.currentTarget.src = 'https://ui-avatars.com/api/?name=Critic&background=e2e8f0&color=334155&bold=true'
+}
+
 interface AppShellProps {
 	children: ReactNode
 	headerEyebrow?: string
@@ -254,6 +259,7 @@ interface HomePageProps {
 
 // Home page: fetches all movies and filters them using the home-page search term
 function HomePage({ searchTerm, favouriteMovieIds, onToggleFavourite }: HomePageProps) {
+	const moviesPerPage = 6
 	const [movies, setMovies] = useState<Movie[]>([])
 	const [isLoading, setIsLoading] = useState(true)
 	const [errorMessage, setErrorMessage] = useState('')
@@ -261,6 +267,7 @@ function HomePage({ searchTerm, favouriteMovieIds, onToggleFavourite }: HomePage
 	const [minimumRatingFilter, setMinimumRatingFilter] = useState('0')
 	const [maximumRuntimeFilter, setMaximumRuntimeFilter] = useState('0')
 	const [sortFilter, setSortFilter] = useState('default')
+	const [currentPage, setCurrentPage] = useState(1)
 	const normalizedSearchTerm = searchTerm.trim().toLowerCase()
 
 	// Builds the genre dropdown values from currently loaded movies
@@ -280,6 +287,12 @@ function HomePage({ searchTerm, favouriteMovieIds, onToggleFavourite }: HomePage
 
 		return Array.from(genres).sort((a, b) => a.localeCompare(b))
 	}, [movies])
+
+	// Builds one dedicated list containing only favourited movies
+	const favouriteMovies = useMemo(() => {
+		const favouriteMovieIdSet = new Set(favouriteMovieIds)
+		return movies.filter((movie) => favouriteMovieIdSet.has(movie.id))
+	}, [movies, favouriteMovieIds])
 
 	// Applies search + advanced filters first then applies the selected sort order
 	const filteredMovies = useMemo(() => {
@@ -350,6 +363,23 @@ function HomePage({ searchTerm, favouriteMovieIds, onToggleFavourite }: HomePage
 		return filtered
 	}, [movies, normalizedSearchTerm, genreFilter, minimumRatingFilter, maximumRuntimeFilter, sortFilter])
 
+	const totalPages = useMemo(() => {
+		if (filteredMovies.length === 0) {
+			return 1
+		}
+
+		return Math.ceil(filteredMovies.length / moviesPerPage)
+	}, [filteredMovies.length, moviesPerPage])
+
+	const paginatedMovies = useMemo(() => {
+		const startIndex = (currentPage - 1) * moviesPerPage
+		return filteredMovies.slice(startIndex, startIndex + moviesPerPage)
+	}, [filteredMovies, currentPage, moviesPerPage])
+
+	const pageButtons = useMemo(() => {
+		return Array.from({ length: totalPages }, (_, index) => index + 1)
+	}, [totalPages])
+
 	// Resets only the advanced filters and this does not clear the global search bar input
 	const clearAdvancedFilters = () => {
 		setGenreFilter('all')
@@ -357,6 +387,14 @@ function HomePage({ searchTerm, favouriteMovieIds, onToggleFavourite }: HomePage
 		setMaximumRuntimeFilter('0')
 		setSortFilter('default')
 	}
+
+	useEffect(() => {
+		setCurrentPage(1)
+	}, [normalizedSearchTerm, genreFilter, minimumRatingFilter, maximumRuntimeFilter, sortFilter])
+
+	useEffect(() => {
+		setCurrentPage((previousPage) => Math.min(previousPage, totalPages))
+	}, [totalPages])
 
 	useEffect(() => {
 		let isMounted = true
@@ -386,6 +424,9 @@ function HomePage({ searchTerm, favouriteMovieIds, onToggleFavourite }: HomePage
 			isMounted = false
 		}
 	}, [])
+
+	const startMovieNumber = filteredMovies.length === 0 ? 0 : (currentPage - 1) * moviesPerPage + 1
+	const endMovieNumber = Math.min(currentPage * moviesPerPage, filteredMovies.length)
 
 	return (
 		<section className="fade-up">
@@ -461,21 +502,59 @@ function HomePage({ searchTerm, favouriteMovieIds, onToggleFavourite }: HomePage
 						</div>
 					</div>
 
+					<article className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+						<div className="flex flex-wrap items-center justify-between gap-2">
+							<h3 className="text-lg font-semibold text-slate-900">Favourite Movies</h3>
+							<span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-rose-700 ring-1 ring-rose-300">
+								{favouriteMovies.length} saved
+							</span>
+						</div>
+
+						{favouriteMovies.length === 0 ? (
+							<p className="mt-3 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+								No favourite movies yet. Click "Add to Favourite" on any movie card to save it here.
+							</p>
+						) : (
+							<div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+								{favouriteMovies.map((movie) => (
+									<Link
+										key={`favourite-${movie.id}`}
+										to={`/movies/${movie.id}`}
+										className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 transition hover:border-slate-300 hover:bg-slate-50"
+									>
+										<img
+											src={movie.image}
+											alt={`${movie.title} poster`}
+											className="h-16 w-12 rounded-md border border-slate-200 object-cover"
+											onError={handleImageFallback}
+										/>
+										<div className="min-w-0">
+											<p className="truncate text-sm font-semibold text-slate-900 group-hover:text-slate-950">{movie.title}</p>
+											<p className="mt-1 text-xs text-slate-500">{formatRuntime(movie.runtime)}</p>
+										</div>
+									</Link>
+								))}
+							</div>
+						)}
+					</article>
+
 					{filteredMovies.length === 0 ? (
 						<div className="rounded-2xl border border-slate-200 bg-white/90 p-8 text-center text-slate-600 shadow-sm">
 							No movies matched your search and filters. Try another combination.
 						</div>
 					) : (
-						<div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-							{filteredMovies.map((movie, index) => {
+						<>
+							<div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+								{paginatedMovies.map((movie, index) => {
 						const score = movie.averageCriticScore ?? 0
 						const isFavourite = favouriteMovieIds.includes(movie.id)
+						const animationIndex = (currentPage - 1) * moviesPerPage + index
 
 						return (
 							<article
 								key={movie.id}
-								className="group fade-up relative overflow-hidden rounded-3xl border border-slate-200/80 bg-white/90 shadow-md shadow-slate-200/60 transition hover:-translate-y-1 hover:shadow-xl"
-								style={{ animationDelay: `${index * 80}ms` }}
+								className="group fade-up relative overflow-hidden rounded-3xl border border-slate-200/80 bg-white/90 shadow-sm shadow-slate-200/60 transition hover:-translate-y-1 hover:shadow-lg"
+								style={{ animationDelay: `${animationIndex * 80}ms` }}
 							>
 								<button
 									type="button"
@@ -486,7 +565,7 @@ function HomePage({ searchTerm, favouriteMovieIds, onToggleFavourite }: HomePage
 								</button>
 
 								<Link to={`/movies/${movie.id}`} className="block">
-									<div className="relative h-96 overflow-hidden bg-slate-100">
+									<div className="relative h-72 overflow-hidden bg-slate-100 sm:h-80">
 										<img
 											src={movie.image}
 											alt={`${movie.title} poster`}
@@ -503,14 +582,52 @@ function HomePage({ searchTerm, favouriteMovieIds, onToggleFavourite }: HomePage
 									</div>
 
 									<div className="space-y-2 px-5 py-4">
-										<h2 className="text-2xl text-slate-900">{highlightText(movie.title, searchTerm)}</h2>
+										<h2 className="text-xl text-slate-900">{highlightText(movie.title, searchTerm)}</h2>
 										<p className="line-clamp-3 text-sm text-slate-600">{highlightText(movie.synopsis, searchTerm)}</p>
 									</div>
 								</Link>
 							</article>
 						)
-							})}
-						</div>
+								})}
+							</div>
+
+							<div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+								<p className="text-sm text-slate-600">
+									Showing {startMovieNumber}-{endMovieNumber} of {filteredMovies.length} movies
+								</p>
+
+								<div className="flex flex-wrap items-center gap-2">
+									<button
+										type="button"
+										onClick={() => setCurrentPage((page) => Math.max(page - 1, 1))}
+										disabled={currentPage === 1}
+										className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 transition enabled:hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+									>
+										Previous
+									</button>
+
+									{pageButtons.map((pageNumber) => (
+										<button
+											key={pageNumber}
+											type="button"
+											onClick={() => setCurrentPage(pageNumber)}
+											className={`rounded-lg px-3 py-1.5 text-sm font-semibold ring-1 transition ${currentPage === pageNumber ? 'bg-slate-900 text-white ring-slate-900' : 'bg-white text-slate-700 ring-slate-300 hover:bg-slate-100'}`}
+										>
+											{pageNumber}
+										</button>
+									))}
+
+									<button
+										type="button"
+										onClick={() => setCurrentPage((page) => Math.min(page + 1, totalPages))}
+										disabled={currentPage === totalPages}
+										className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 transition enabled:hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+									>
+										Next
+									</button>
+								</div>
+							</div>
+						</>
 					)}
 				</div>
 			) : null}
@@ -622,6 +739,7 @@ function MovieDetailsPage({ searchTerm, favouriteMovieIds, onToggleFavourite }: 
 			const searchableText = [
 				review.title ?? '',
 				review.criticName,
+				review.criticAvatarUrl ?? '',
 				review.comment,
 				review.publishedAt ?? '',
 				review.timePublishedAgo ?? '',
@@ -676,7 +794,7 @@ function MovieDetailsPage({ searchTerm, favouriteMovieIds, onToggleFavourite }: 
 	return (
 		<section className="fade-up space-y-6">
 			<Link to="/" className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-slate-900 underline">
-				Back to all movies
+				← Back to all movies
 			</Link>
 
 			{isLoading ? (
@@ -756,7 +874,13 @@ function MovieDetailsPage({ searchTerm, favouriteMovieIds, onToggleFavourite }: 
 											) : null}
 
 											<div className="mt-1 flex flex-wrap items-center justify-between gap-2">
-												<div className="flex items-center gap-2">
+												<div className="flex items-center gap-3">
+													<img
+														src={review.criticAvatarUrl}
+														alt={`${review.criticName} profile`}
+														className="h-10 w-10 rounded-full border border-slate-200 object-cover"
+														onError={handleCriticAvatarFallback}
+													/>
 													<p className="text-lg font-semibold text-slate-900">{highlightText(review.criticName, detailHighlightTerm)}</p>
 													{isTopRatedCritic ? (
 														<span className="rounded-full bg-sky-100 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-sky-700 ring-1 ring-sky-300">

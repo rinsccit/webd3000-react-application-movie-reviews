@@ -25,6 +25,15 @@ h3 {
   font-family: 'Fraunces', Georgia, serif;
 }
 
+/* Ensures all actionable buttons show a hand cursor consistently */
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
 /* Simple entrance animation used when content first appears on screen */
 @keyframes fade-up {
   from {

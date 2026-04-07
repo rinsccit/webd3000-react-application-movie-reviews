@@ -220,12 +220,18 @@ function normalizeMovie(rawMovie: Record<string, unknown>): Movie {
 function normalizeReview(rawReview: Record<string, unknown>, movieId: string): Review {
   const scoreValue = getField(rawReview, ["score", "rating", "criticScore", "criticRating", "stars"])
   const normalizedScore = asNumber(scoreValue, NaN)
+  const criticName = asString(getField(rawReview, ["criticName", "critic", "reviewerName", "createdBy"]), "Anonymous Critic")
+  const criticAvatarUrl = asString(
+    getField(rawReview, ["criticAvatarUrl", "criticImage", "criticPhoto", "avatar", "profilePicture", "profileImage"]),
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(criticName)}&background=fde68a&color=78350f&bold=true`,
+  )
 
   return {
     id: asString(getField(rawReview, ["id", "reviewId", "_id"]), crypto.randomUUID()),
     movieId: asString(getField(rawReview, MOVIE_ID_FIELD_KEYS), movieId),
     title: asString(getField(rawReview, ["title", "reviewTitle", "headline"]), ""),
-    criticName: asString(getField(rawReview, ["criticName", "critic", "reviewerName", "createdBy"]), "Anonymous Critic"),
+    criticName,
+    criticAvatarUrl,
     score: Number.isFinite(normalizedScore) ? normalizedScore : undefined,
     comment: asString(getField(rawReview, ["comment", "reviewText", "content", "body", "description"]), "No written review available."),
     isPublished: asBoolean(getField(rawReview, ["isPublished", "published", "status"]), true),
@@ -356,17 +362,26 @@ export async function fetchMovieById(movieId: string): Promise<Movie> {
 
 // Internal review fetch that also returns raw payload details for debugging
 async function fetchMovieReviewsInternal(movieId: string): Promise<MovieReviewsDebugResult> {
+  const normalizedMovieId = movieId.trim()
+
+  if (!normalizedMovieId) {
+    return {
+      reviews: [],
+      rawPayload: null,
+      requestedPath: null,
+    }
+  }
+
   const reviewPaths = [
-    `${API_BASE_URL}/movies/reviews?movieId=${encodeURIComponent(movieId)}`,
-    `${API_BASE_URL}/movies/reviews?movieID=${encodeURIComponent(movieId)}`,
-    `${API_BASE_URL}/movies/reviews/${movieId}`,
-    `${API_BASE_URL}/movies/reviews`,
-    `${API_BASE_URL}/movies/${movieId}/reviews`,
-    `${API_BASE_URL}/reviews/movie/${movieId}`,
-    `${API_BASE_URL}/reviews?movieId=${encodeURIComponent(movieId)}`,
-    `${API_BASE_URL}/reviews?movieID=${encodeURIComponent(movieId)}`,
-    `${API_BASE_URL}/reviews?id=${encodeURIComponent(movieId)}`,
-    `${API_BASE_URL}/reviews/${movieId}`,
+    `${API_BASE_URL}/movies/reviews?movieID=${encodeURIComponent(normalizedMovieId)}`,
+    `${API_BASE_URL}/movies/reviews?movieId=${encodeURIComponent(normalizedMovieId)}`,
+    `${API_BASE_URL}/movies/reviews/${normalizedMovieId}`,
+    `${API_BASE_URL}/movies/${normalizedMovieId}/reviews`,
+    `${API_BASE_URL}/reviews/movie/${normalizedMovieId}`,
+    `${API_BASE_URL}/reviews?movieID=${encodeURIComponent(normalizedMovieId)}`,
+    `${API_BASE_URL}/reviews?movieId=${encodeURIComponent(normalizedMovieId)}`,
+    `${API_BASE_URL}/reviews?id=${encodeURIComponent(normalizedMovieId)}`,
+    `${API_BASE_URL}/reviews/${normalizedMovieId}`,
   ]
 
   let payload: unknown = null
