@@ -846,6 +846,11 @@ function MovieDetailsPage({ searchTerm, favouriteMovieIds, onToggleFavourite }: 
 									<dt className="font-semibold uppercase tracking-wide text-orange-700">Release Date</dt>
 									<dd className="mt-1 text-slate-800">{highlightText(formatDate(movie.releaseDate), detailHighlightTerm)}</dd>
 								</div>
+
+								<div className="rounded-xl bg-orange-50 p-4">
+									<dt className="font-semibold uppercase tracking-wide text-orange-700">Genre</dt>
+									<dd className="mt-1 text-slate-800">{highlightText(movie.genre, detailHighlightTerm)}</dd>
+								</div>
 							</dl>
 						</div>
 					</article>
