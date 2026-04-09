@@ -1,6 +1,6 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 
 // https://vite.dev/config/
 // Vite controls local development and production builds for the frontend
@@ -9,12 +9,12 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
-      // Sends local '/api' calls to the backend service running on localhost:7195
+      // Sends local "/api" calls to the backend service running on localhost:7195
       "/api": {
-        target:"https://localhost:7195",
+        target: "https://localhost:7195",
         changeOrigin: true,
         secure: false,
       }
-    }
-  }
-})
+    },
+  },
+});

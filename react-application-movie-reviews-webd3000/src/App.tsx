@@ -5,46 +5,46 @@ import { fetchMovieById, fetchMovieReviews, fetchMovieReviewsDebug, fetchMovies 
 import type { Movie } from "./types/Movie";
 import type { Review } from "./types/Review";
 
-const FAVOURITE_MOVIES_STORAGE_KEY = 'movie-reviews.favourite-movie-ids'
+const FAVOURITE_MOVIES_STORAGE_KEY = "movie-reviews.favourite-movie-ids";
 
 // Reads favourite movie IDs from localStorage and returns a safe normalized list
 function loadFavouriteMovieIds(): string[] {
-	if (typeof window === 'undefined') {
-		return []
+	if (typeof window === "undefined") {
+		return [];
 	}
 
 	try {
-		const storedValue = window.localStorage.getItem(FAVOURITE_MOVIES_STORAGE_KEY)
+		const storedValue = window.localStorage.getItem(FAVOURITE_MOVIES_STORAGE_KEY);
 
 		if (!storedValue) {
-			return []
+			return [];
 		}
 
-		const parsedValue = JSON.parse(storedValue) as unknown
+		const parsedValue = JSON.parse(storedValue) as unknown;
 
 		if (!Array.isArray(parsedValue)) {
-			return []
+			return [];
 		}
 
 		const validIds = parsedValue
-			.filter((entry): entry is string => typeof entry === 'string')
+			.filter((entry): entry is string => typeof entry === "string")
 			.map((entry) => entry.trim())
-			.filter((entry) => entry.length > 0)
+			.filter((entry) => entry.length > 0);
 
-		return Array.from(new Set(validIds))
+		return Array.from(new Set(validIds));
 	} catch {
-		return []
+		return [];
 	}
 }
 
 // Saves favourite movie IDs to localStorage so the selection survives page reloads
 function saveFavouriteMovieIds(favouriteMovieIds: string[]): void {
-	if (typeof window === 'undefined') {
-		return
+	if (typeof window === "undefined") {
+		return;
 	}
 
 	try {
-		window.localStorage.setItem(FAVOURITE_MOVIES_STORAGE_KEY, JSON.stringify(favouriteMovieIds))
+		window.localStorage.setItem(FAVOURITE_MOVIES_STORAGE_KEY, JSON.stringify(favouriteMovieIds));
 	} catch {
 		// Ignore storage errors so the rest of the app remains usable.
 	}
@@ -52,7 +52,7 @@ function saveFavouriteMovieIds(favouriteMovieIds: string[]): void {
 
 // This helper makes sure user text is treated as plain text and not as a regular-expression command
 function escapeRegex(searchTerm: string): string {
-	return searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+	return searchTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 // This helper wraps matching text in a highlighted marker so search matches are easy to spot
@@ -63,7 +63,7 @@ function highlightText(text: string, searchTerm: string): ReactNode {
 		return text
 	}
 
-	const matcher = new RegExp(`(${escapeRegex(normalizedSearchTerm)})`, 'ig')
+	const matcher = new RegExp(`(${escapeRegex(normalizedSearchTerm)})`, "ig")
 	const parts = text.split(matcher)
 
 	return parts.map((part, index) => {
@@ -85,14 +85,14 @@ function formatRuntime(runtime: number): string {
 		return 'Runtime unavailable'
 	}
 
-	const hours = Math.floor(runtime/60)
-	const minutes = runtime%60
+	const hours = Math.floor(runtime/60);
+	const minutes = runtime%60;
 
 	if (hours === 0) {
-		return `${minutes} minutes`
+		return `${minutes} minutes`;
 	}
 
-	return `${hours} hours ${minutes} minutes`
+	return `${hours} hours ${minutes} minutes`;
 }
 
 // Converts A.P.I date values into a readable date format for users
@@ -100,14 +100,14 @@ function formatDate(dateValue: string): string {
 	const date = new Date(dateValue)
 
 	if (Number.isNaN(date.getTime())) {
-		return 'Date unavailable'
+		return "Date unavailable";
 	}
 
 	return date.toLocaleDateString(undefined, {
-		year: 'numeric',
-		month: 'long',
-		day: 'numeric',
-	})
+		year: "numeric",
+		month: "long",
+		day: "numeric",
+	});
 }
 
 // Applies colour styles to ratings so strong and weak ratings are visually distinct
@@ -116,16 +116,20 @@ function scoreTone(score: number): string {
 		return 'bg-emerald-100 text-emerald-700 ring-emerald-300'
 	}
 
-	if (score >= 2.5) {
-		return 'bg-amber-100 text-amber-700 ring-amber-300'
+	if (score >= 4) {
+		return "bg-emerald-100 text-emerald-700 ring-emerald-300";
 	}
 
-	return 'bg-rose-100 text-rose-700 ring-rose-300'
+	if (score >= 2.5) {
+		return "bg-amber-100 text-amber-700 ring-amber-300";
+	}
+
+	return "bg-red-100 text-red-700 ring-red-300";
 }
 
-// Normalizes critic names so comparisons remain reliable regardless of case or spacing
+// Normalizes critic names for consistent comparison (e.g., for top-rated tag)
 function normalizeCriticName(criticName: string): string {
-	return criticName.trim().toLowerCase()
+    return criticName.trim().toLowerCase();
 }
 
 // Returns the critic names (normalized) with the highest review-count, used for the Top Rated tag
@@ -847,9 +851,14 @@ function MovieDetailsPage({ searchTerm, favouriteMovieIds, onToggleFavourite }: 
 									<dd className="mt-1 text-slate-800">{highlightText(formatDate(movie.releaseDate), detailHighlightTerm)}</dd>
 								</div>
 
-								<div className="rounded-xl bg-orange-50 p-4">
+								<div className="rounded-xl bg-blue-50 p-4">
 									<dt className="font-semibold uppercase tracking-wide text-orange-700">Genre</dt>
 									<dd className="mt-1 text-slate-800">{highlightText(movie.genre, detailHighlightTerm)}</dd>
+								</div>
+
+								<div className="rounded-xl bg-purple-50 p-4">
+									<dt className="font-semibold uppercase tracking-wide text-orange-700">Viewership rating</dt>
+									<dd className="mt-1 text-slate-800">{highlightText(movie.rating, detailHighlightTerm)}</dd>
 								</div>
 							</dl>
 						</div>
