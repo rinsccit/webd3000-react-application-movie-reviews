@@ -1,16 +1,30 @@
 <!doctype html>
+<!--
+  Main H.T.M.L file for the MovieReviews web application.
+  This file sets up the basic structure of the webpage and tells the browser where to load the React application.
+  The comments are added to help anyone (even non-coders) understand what each part does.
+-->
 <html lang="en">
   <head>
     <!-- Basic webpage metadata and browser tab information -->
     <meta charset="UTF-8" />
+    <!-- The icon shown in the browser tab (uses a S.V.G image) -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- Makes the website look good on all screen sizes (phones, tablets and computers) -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- The text shown in the browser tab -->
     <title>MovieReviews Website</title>
   </head>
   <body>
-    <!-- React renders the entire application into this root container -->
+    <!--
+      React renders the entire application into this root container.
+      The <div id="root"></div> is where all the application's content appears.
+    -->
     <div id="root"></div>
-    <!-- Loads the TypeScript entry point that starts the frontend application -->
+    <!--
+      Loads the TypeScript entry point that starts the frontend application.
+      This script tells the browser to run the React code.
+    -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

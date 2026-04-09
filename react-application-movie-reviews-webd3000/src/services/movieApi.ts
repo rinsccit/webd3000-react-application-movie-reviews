@@ -1,6 +1,9 @@
 import type { Movie } from "../types/Movie";
 import type { Review } from "../types/Review";
 
+/* This file contains all the functions and helpers for talking to the backend A.P.I.
+   It helps the rest of the application fetch movies and reviews and makes sure data is always in the right format. */
+
 // All A.P.I calls start from this base path. In development, Vite forwards '/api' to the local backend
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
 
@@ -14,12 +17,12 @@ class ApiResponseError extends Error {
   }
 }
 
-// Confirms that a value is an object-like record before trying to read named fields from it
+// Checks if a value is an object (used for safely reading fields from A.P.I responses)
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-// Tries several field names because backend payloads can vary between environments
+// Tries several possible field names because backend payloads can vary between environments
 function getField(record: Record<string, unknown>, keys: string[]): unknown {
   for (const key of keys) {
     const value = record[key];
@@ -30,7 +33,7 @@ function getField(record: Record<string, unknown>, keys: string[]): unknown {
   return undefined;
 }
 
-// Safely converts unknown values to text for display
+// Converts unknown values to text for display (returns fallback if not possible)
 function asString(value: unknown, fallback = ""): string {
   if (typeof value === "string") {
     return value;
@@ -41,7 +44,7 @@ function asString(value: unknown, fallback = ""): string {
   return fallback;
 }
 
-// Safely converts unknown values to numbers for calculations
+// Converts unknown values to numbers for calculations (returns fallback if not possible)
 function asNumber(value: unknown, fallback = 0): number {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
@@ -55,7 +58,7 @@ function asNumber(value: unknown, fallback = 0): number {
   return fallback;
 }
 
-// Some A.P.Is send genre as a list while others send one string.
+// Some A.P.Is send genre as a list while others send one string and this function handles both
 function asGenre(value: unknown): string {
   if (typeof value === "string") {
     return value;
@@ -68,7 +71,7 @@ function asGenre(value: unknown): string {
   return "";
 }
 
-// Converts different publish-status styles into one true-or-false value
+// Converts different publish-status styles into one true or false value (handles 'published', 'draft' etc)
 function asBoolean(value: unknown, fallback = true): boolean {
   if (typeof value === "boolean") {
     return value;
@@ -85,7 +88,7 @@ function asBoolean(value: unknown, fallback = true): boolean {
   return fallback;
 }
 
-// Finds an array payload even when the backend wraps it in another object
+// Finds an array payload even when the backend wraps it in another object (e.g { data: [...] })
 function getArrayPayload(payload: unknown): unknown[] {
   if (Array.isArray(payload)) {
     return payload;
@@ -114,7 +117,7 @@ function getArrayPayload(payload: unknown): unknown[] {
   return [];
 }
 
-// Detects whether an object probably represents a review
+// Detects whether an object probably represents a review (by checking for common review fields)
 function isLikelyReviewRecord(record: Record<string, unknown>): boolean {
   const reviewHints = [
     "criticName",
@@ -138,7 +141,7 @@ function isLikelyReviewRecord(record: Record<string, unknown>): boolean {
 // These are known movie ID field names observed across different backend conventions.
 const MOVIE_ID_FIELD_KEYS = ["movieId", "movieID", "MovieId", "movie_id", "movie", "filmId", "filmID"];
 
-// Tracks whether the backend explicitly linked the review to a movie.
+// Checks if the backend explicitly linked the review to a movie (for filtering accuracy)
 function hasExplicitMovieId(rawReview: Record<string, unknown>): boolean {
   const movieIdValue = getField(rawReview, MOVIE_ID_FIELD_KEYS);
 
@@ -157,12 +160,12 @@ function hasExplicitMovieId(rawReview: Record<string, unknown>): boolean {
   return true;
 }
 
-// Normalizes IDs for reliable text comparison
+// Normalizes IDs for reliable text comparison (e.g lowercase and trimmed)
 function normalizeId(value: string): string {
   return value.trim().toLowerCase();
 }
 
-// Finds one object payload even if the backend wraps it in a data container
+// Finds one object payload even if the backend wraps it in a data container (e.g { data: {...} })
 function getObjectPayload(payload: unknown): Record<string, unknown> | null {
   if (isRecord(payload)) {
     if ("id" in payload || "title" in payload || "synopsis" in payload) {
@@ -186,7 +189,7 @@ function getObjectPayload(payload: unknown): Record<string, unknown> | null {
   return null;
 }
 
-// Converts raw movie payloads into the application's movie model.
+// Converts raw movie payloads into the application's movie model (ensures all fields are present and correct)
 function normalizeMovie(rawMovie: Record<string, unknown>): Movie {
   const imageValue = asString(getField(rawMovie, ["image", "imageUrl", "poster", "posterUrl", "posterImage"]));
   const genreValue = asGenre(getField(rawMovie, ["genre", "genres", "category", "categories"]));
@@ -205,7 +208,7 @@ function normalizeMovie(rawMovie: Record<string, unknown>): Movie {
   };
 }
 
-// Converts raw review payloads into the application's review model.
+// Converts raw review payloads into the application's review model (ensures all fields are present and correct)
 function normalizeReview(rawReview: Record<string, unknown>, movieId: string): Review {
   const scoreValue = getField(rawReview, ["score", "rating", "criticScore", "criticRating", "stars"]);
   const normalizedScore = asNumber(scoreValue, NaN);
@@ -243,7 +246,7 @@ function getAverageScore(reviews: Review[]): number {
   return Number((total/scoredReviews.length).toFixed(1));
 }
 
-// Debug result shape used to inspect raw payloads during troubleshooting
+// Structure for debugging movie reviews A.P.I responses (shows both parsed and raw data)
 interface MovieReviewsDebugResult {
   reviews: Review[]
   rawPayload: unknown
@@ -255,11 +258,11 @@ async function requestJson(path: string): Promise<unknown> {
   const response = await fetch(path);
 
   if (!response.ok) {
-    // If 404 (not found), treat as "no reviews" and return empty array (no error, no log)
+    // If 404 (not found) error then treat as "no reviews" and return empty array with no error and no log)
     if (response.status === 404) {
       return [];
     }
-    // For other errors, do not log or throw, just return null (fail silently)
+    // For other errors do not log or throw an error just return null (fail silently)
     return null;
   }
 
@@ -276,7 +279,7 @@ async function requestJson(path: string): Promise<unknown> {
   return JSON.parse(responseText) as unknown;
 }
 
-// Tries several endpoint options until one works.
+// Tries several endpoint options until one works (useful when backend endpoints differ between environments)
 async function requestFirstAvailable(paths: string[]): Promise<unknown> {
   let lastError: unknown = null;
 
@@ -298,6 +301,7 @@ async function requestFirstAvailable(paths: string[]): Promise<unknown> {
 }
 
 // Loads all movies and ensures every movie has an average critic score
+// Returns a list of Movie objects ready for display
 export async function fetchMovies(): Promise<Movie[]> {
   const payload = await requestJson(`${API_BASE_URL}/movies`);
   const rawMovies = getArrayPayload(payload).filter(isRecord);
@@ -355,6 +359,7 @@ export async function fetchMovieById(movieId: string): Promise<Movie> {
 }
 
 // Internal review fetch that also returns raw payload details for debugging
+// Used by both the main fetch and the debug fetch
 async function fetchMovieReviewsInternal(movieId: string): Promise<MovieReviewsDebugResult> {
   const normalizedMovieId = movieId.trim()
 
@@ -453,12 +458,14 @@ async function fetchMovieReviewsInternal(movieId: string): Promise<MovieReviewsD
 }
 
 // Public review fetch used by the main application
+// Returns only the parsed reviews for a given movie
 export async function fetchMovieReviews(movieId: string): Promise<Review[]> {
   const result = await fetchMovieReviewsInternal(movieId);
   return result.reviews;
 }
 
 // Debug fetch used when the interface needs endpoint and raw payload information
+// Returns both the parsed reviews and the raw API response for troubleshooting
 export async function fetchMovieReviewsDebug(movieId: string): Promise<MovieReviewsDebugResult> {
   return fetchMovieReviewsInternal(movieId);
 }

@@ -1,3 +1,6 @@
+// ESLint configuration file for the MovieReviews project.
+// This file sets up automated code quality checks (linting) for JavaScript, TypeScript and React code.
+// It helps catch errors, enforce best practices and keep the codebase consistent.
 import js from "@eslint/js";
 import globals from "globals";
 import reactHooks from "eslint-plugin-react-hooks";

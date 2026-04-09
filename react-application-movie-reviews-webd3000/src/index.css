@@ -1,15 +1,27 @@
-/* Loads web fonts used across the interface and then loads Tailwind utilities */
+/*
+ * Main stylesheet for the MovieReviews web application.
+ * This file sets up fonts, colours, backgrounds and some basic animations.
+ * The comments are added to help anyone (even non-coders) understand what each section does.
+ */
+
+/* Loads web fonts used across the interface and then loads Tailwind utilities for easy styling */
 @import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Fraunces:opsz,wght@9..144,500;9..144,700&display=swap");
 @import "tailwindcss";
 
-/* Defines default colours and type for the entire webpage */
+/*
+ * Sets the default text colour, background colour and font for the whole web application.
+ * ':root' means these styles apply everywhere unless something overrides them.
+ */
 :root {
-  color: #1F2937;
-  background-color: #FFFEF9;
-  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+  color: #1F2937; /* Main text colour (dark slate) */
+  background-color: #FFFEF9; /* Soft off-white background */
+  font-family: "Space Grotesk", "Segoe UI", sans-serif; /* Modern and easy-to-read font */
 }
 
-/* Adds a warm background gradient so the layout feels less flat */
+/*
+ * Adds a warm, colourful background gradient to the whole webpage so it feels less flat.
+ * The gradient uses soft yellow and red highlights for a friendly look.
+ */
 body {
   margin: 0;
   min-height: 100vh;
@@ -19,22 +31,33 @@ body {
     linear-gradient(120deg, #FFFEF9 0%, #FFFBEB 50%, #FFF7ED 100%);
 }
 
+/*
+ * Uses a special font for all main headings (h1, h2, h3) to make them stand out.
+ */
 h1,
 h2,
 h3 {
   font-family: "Fraunces", Georgia, serif;
 }
 
-/* Ensures all actionable buttons show a hand cursor consistently */
+/*
+ * Makes sure all buttons show a hand cursor so users know they can click them.
+ */
 button {
   cursor: pointer;
 }
 
+/*
+ * Shows a 'not allowed' cursor when a button is disabled (cannot be clicked).
+ */
 button:disabled {
   cursor: not-allowed;
 }
 
-/* Simple entrance animation used when content first appears on screen */
+/*
+ * Simple fade-up animation for when content first appears on screen.
+ * It makes the application feel more dynamic and modern.
+ */
 @keyframes fade-up {
   from {
     opacity: 0;
@@ -47,7 +70,10 @@ button:disabled {
   }
 }
 
-/* Helper class that applies the fade-up animation to components */
+/*
+ * Helper class that applies the fade-up animation to components.
+ * Just add 'fade-up' to any element to animate it when it appears.
+ */
 .fade-up {
   animation: fade-up 450ms ease-out both;
 }

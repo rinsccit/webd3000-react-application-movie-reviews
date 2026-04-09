@@ -1,3 +1,5 @@
+// Main application file for the MovieReviews web application.
+// It handles routing, state management and rendering of all pages.
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode, SyntheticEvent } from "react";
 import { Link, Navigate, Route, Routes, useMatch, useParams } from "react-router-dom";
@@ -5,9 +7,11 @@ import { fetchMovieById, fetchMovieReviews, fetchMovieReviewsDebug, fetchMovies 
 import type { Movie } from "./types/Movie";
 import type { Review } from "./types/Review";
 
+// Key used to store favourite movie IDs in the browser's localStorage
 const FAVOURITE_MOVIES_STORAGE_KEY = "movie-reviews.favourite-movie-ids";
 
 // Reads favourite movie IDs from localStorage and returns a safe normalized list
+// so that the users can keep their favourites even after closing the browser
 function loadFavouriteMovieIds(): string[] {
 	if (typeof window === "undefined") {
 		return [];
@@ -50,12 +54,12 @@ function saveFavouriteMovieIds(favouriteMovieIds: string[]): void {
 	}
 }
 
-// This helper makes sure user text is treated as plain text and not as a regular-expression command
+// Escapes special characters in search terms so they are treated as plain text
 function escapeRegex(searchTerm: string): string {
 	return searchTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-// This helper wraps matching text in a highlighted marker so search matches are easy to spot
+// Highlights matching search terms in text by wrapping them in a marker
 function highlightText(text: string, searchTerm: string): ReactNode {
 	const normalizedSearchTerm = searchTerm.trim()
 
@@ -79,7 +83,7 @@ function highlightText(text: string, searchTerm: string): ReactNode {
 	})
 }
 
-// Converts runtime in minutes into a human-friendly sentence
+// Converts runtime in minutes into a human-friendly sentence (e.g 2 hours 10 minutes)
 function formatRuntime(runtime: number): string {
 	if (!runtime || runtime <= 0) {
 		return 'Runtime unavailable'
@@ -179,6 +183,8 @@ function handleCriticAvatarFallback(event: SyntheticEvent<HTMLImageElement>): vo
 	event.currentTarget.src = 'https://ui-avatars.com/api/?name=Critic&background=e2e8f0&color=334155&bold=true'
 }
 
+
+// Properties (Props) for the AppShell layout component
 interface AppShellProps {
 	children: ReactNode
 	headerEyebrow?: string
@@ -192,6 +198,7 @@ interface AppShellProps {
 }
 
 // Shared page frame that keeps one consistent header, search bar and footer across routes
+// so that the application looks and feels the same on every page
 function AppShell({
 	children,
 	headerEyebrow,
@@ -255,6 +262,8 @@ function AppShell({
 }
 
 
+
+// Properties (Props) for the HomePage component
 interface HomePageProps {
 	searchTerm: string
 	favouriteMovieIds: string[]
@@ -262,6 +271,7 @@ interface HomePageProps {
 }
 
 // Home page: fetches all movies and filters them using the home-page search term
+// Also handles advanced filters, sorting and pagination
 function HomePage({ searchTerm, favouriteMovieIds, onToggleFavourite }: HomePageProps) {
 	const moviesPerPage = 6
 	const [movies, setMovies] = useState<Movie[]>([])
@@ -639,6 +649,8 @@ function HomePage({ searchTerm, favouriteMovieIds, onToggleFavourite }: HomePage
 	)
 }
 
+
+// Properties (Props) for the MovieDetailsPage component
 interface MovieDetailsPageProps {
 	searchTerm: string
 	favouriteMovieIds: string[]
@@ -646,6 +658,7 @@ interface MovieDetailsPageProps {
 }
 
 // Movie details webpage: loads one movie and its reviews then highlights matching details-page search text
+// Also shows top-rated critics and handles review search
 function MovieDetailsPage({ searchTerm, favouriteMovieIds, onToggleFavourite }: MovieDetailsPageProps) {
 	const { movieId } = useParams<{ movieId: string }>()
 	const [movie, setMovie] = useState<Movie | null>(null)
@@ -928,6 +941,7 @@ function MovieDetailsPage({ searchTerm, favouriteMovieIds, onToggleFavourite }: 
 }
 
 // Top-level route controller that keeps separate search state for the homepage and each movie details webpage
+// Handles switching between pages and manages global state like favourites
 export default function App() {
 	const [homeSearchInput, setHomeSearchInput] = useState('')
 	const [homeSearchTerm, setHomeSearchTerm] = useState('')
